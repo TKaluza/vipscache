@@ -18,7 +18,7 @@ COPY src ./src
 
 RUN uv sync --frozen --no-dev --extra worker
 
-RUN mkdir -p /cache /originals
+RUN mkdir -p /data/raw /data/cache
 
 EXPOSE 5555
 

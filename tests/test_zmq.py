@@ -4,8 +4,8 @@ from pathlib import Path
 from threading import Thread
 from unittest.mock import Mock
 
-from imgcache import CacheLayout, MaterializePolicy, Operation, SourceSpec, ThinClient
-from imgcache.spec import DerivativeSpec
+from imgcache import ImgCacheClient, Operation, SourceSpec
+from imgcache.spec import ImageSpec
 from imgcache.zmq_client import ZmqWorkerClient
 from imgcache.zmq_worker import ZmqWorkerServer
 
@@ -19,31 +19,27 @@ def make_image(path: Path) -> None:
     path.write_bytes(f"P6\n{width} {height}\n255\n".encode("ascii") + pixels)
 
 
-def test_thin_client_materializes_miss_over_zmq(tmp_path):
+def test_img_cache_client_materializes_miss_over_zmq(tmp_path):
     source_path = tmp_path / "source.ppm"
     make_image(source_path)
-    layout = CacheLayout(tmp_path / "cache")
-    source = SourceSpec.from_file(str(source_path), mime="image/x-portable-pixmap")
-    spec = DerivativeSpec.build(
-        source,
-        [Operation("render", {"width": 16}, MaterializePolicy.FORCE)],
-        Operation("encode", {"format": "png"}),
-    )
+    root = tmp_path / "shared"
     endpoint = f"ipc://{tmp_path / 'worker.sock'}"
-    server = ZmqWorkerServer(endpoint, cache_root=layout.root)
+    server = ZmqWorkerServer(endpoint, root=root)
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
 
     with ZmqWorkerClient(endpoint) as worker_client:
-        client = ThinClient(layout, worker_client)
-        path = client.get(spec)
+        client = ImgCacheClient(root, worker_client)
+        image = client.open(source_path, mime="image/x-portable-pixmap")
+        preview = image.scale(width=16).png()
+        path = preview.path()
         worker_client.shutdown_worker()
 
     thread.join(timeout=5)
     server.close()
 
     assert path.exists()
-    assert layout.node_path(spec.nodes[0].key).exists()
+    assert path.is_relative_to(root / "cache" / "leaves")
 
 
 def test_zmq_worker_healthcheck(tmp_path):
@@ -71,7 +67,7 @@ def test_zmq_client_recreates_req_socket_after_timeout():
     context = Mock()
     context.socket.side_effect = [first_socket, second_socket]
     client = ZmqWorkerClient("tcp://worker:5555", context=context, request_retries=1, timeout_ms=1)
-    spec = DerivativeSpec.build(
+    spec = ImageSpec.build(
         SourceSpec("file", "/tmp/source.ppm", mime="image/x-portable-pixmap"),
         [],
         Operation("encode", {"format": "png"}),

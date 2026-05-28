@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
+import threading
 from pathlib import Path
 from typing import Any
 
-from imgcache.spec import DerivativeSpec
+from imgcache.spec import ImageSpec
 
 
 class ZmqWorkerClient:
@@ -25,12 +27,22 @@ class ZmqWorkerClient:
         self.endpoint = endpoint
         self.request_retries = request_retries
         self.timeout_ms = timeout_ms
-        self._socket = self._new_socket()
+        self._local = threading.local()
 
-    def materialize(self, spec: DerivativeSpec) -> Path:
+    def materialize(self, spec: ImageSpec) -> Path:
         response = self._request({"method": "materialize", "spec": spec.to_payload()})
         if response.get("ok"):
-            return Path(response["path"])
+            return Path(response.get("relpath") or response.get("path", ""))
+
+        error = response.get("error", {})
+        error_type = error.get("type", "WorkerError")
+        message = error.get("message", "worker request failed")
+        raise RuntimeError(f"{error_type}: {message}")
+
+    async def amaterialize(self, spec: ImageSpec) -> Path:
+        response = await self._arequest({"method": "materialize", "spec": spec.to_payload()})
+        if response.get("ok"):
+            return Path(response.get("relpath") or response.get("path", ""))
 
         error = response.get("error", {})
         error_type = error.get("type", "WorkerError")
@@ -57,7 +69,10 @@ class ZmqWorkerClient:
         raise RuntimeError(f"{error_type}: {message}")
 
     def close(self) -> None:
-        self._socket.close(linger=0)
+        socket = getattr(self._local, "socket", None)
+        if socket is not None:
+            socket.close(linger=0)
+            self._local.socket = None
 
     def __enter__(self) -> "ZmqWorkerClient":
         return self
@@ -69,9 +84,10 @@ class ZmqWorkerClient:
         attempts = self.request_retries + 1
         for attempt in range(attempts):
             try:
-                self._socket.send_json(payload)
-                if self._socket.poll(self.timeout_ms, self._zmq.POLLIN):
-                    return self._socket.recv_json()
+                socket = self._socket()
+                socket.send_json(payload)
+                if socket.poll(self.timeout_ms, self._zmq.POLLIN):
+                    return socket.recv_json()
             except self._zmq.ZMQError as error:
                 if attempt == attempts - 1:
                     raise RuntimeError(f"ZMQ request failed: {error}") from error
@@ -88,9 +104,43 @@ class ZmqWorkerClient:
         socket.connect(self.endpoint)
         return socket
 
+    def _socket(self):
+        socket = getattr(self._local, "socket", None)
+        if socket is None:
+            socket = self._new_socket()
+            self._local.socket = socket
+        return socket
+
     def _reset_socket(self) -> None:
-        self._socket.close(linger=0)
-        self._socket = self._new_socket()
+        socket = getattr(self._local, "socket", None)
+        if socket is not None:
+            socket.close(linger=0)
+        self._local.socket = self._new_socket()
+
+    async def _arequest(self, payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            import zmq.asyncio
+        except ImportError as error:
+            raise RuntimeError("async ZMQ requests require pyzmq; install imgcache[client].") from error
+
+        context = zmq.asyncio.Context.instance()
+        attempts = self.request_retries + 1
+        for attempt in range(attempts):
+            socket = context.socket(self._zmq.REQ)
+            socket.setsockopt(self._zmq.LINGER, 0)
+            socket.connect(self.endpoint)
+            try:
+                await socket.send_json(payload)
+                if await socket.poll(self.timeout_ms, self._zmq.POLLIN):
+                    return await socket.recv_json()
+            except self._zmq.ZMQError as error:
+                if attempt == attempts - 1:
+                    raise RuntimeError(f"ZMQ request failed: {error}") from error
+            finally:
+                socket.close(linger=0)
+            await asyncio.sleep(0)
+
+        raise TimeoutError(f"ZMQ worker did not reply after {attempts} request attempts")
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -71,38 +71,21 @@ There is no automatic materialization policy.
 ```python
 from pathlib import Path
 
-from imgcache import (
-    CacheLayout,
-    DerivativeSpec,
-    Operation,
-    OriginalsStore,
-    ThinClient,
-)
-from imgcache.zmq_client import ZmqWorkerClient
+from imgcache import ImgCacheClient
 
-cache = CacheLayout("/shared/cache")
-originals = OriginalsStore("/shared/originals")
-
-source = originals.put(Path("example.jpg"), mime="image/jpeg")
-source = type(source)(
-    file_id=source.file_id,
-    original_path=f"/originals/{source.file_id}",
-    mime=source.mime,
+client = ImgCacheClient.zmq(
+    root="/shared",
+    endpoint="tcp://127.0.0.1:5555",
 )
 
-spec = DerivativeSpec.canonical(
-    source,
-    [
-        Operation("normalize", {"colorspace": "srgb"}),
-        Operation("scale", {"longest_edge": 1024}),
-    ],
-    Operation("encode", {"format": "webp", "quality": 82}),
+preview = (
+    client.open(Path("example.jpg"), mime="image/jpeg")
+    .normalize()
+    .scale(longest_edge=1024)
+    .webp(quality=82)
 )
 
-with ZmqWorkerClient("tcp://127.0.0.1:5555") as worker:
-    client = ThinClient(cache, worker)
-    path = client.get(spec)
-
+path = preview.path()
 print(path)
 ```
 
@@ -113,8 +96,7 @@ The client computes the expected cache path locally. On a miss, it asks the work
 Run a worker directly:
 
 ```bash
-IMGCACHE_CACHE_ROOT=/shared/cache \
-IMGCACHE_ORIGINALS_ROOT=/shared/originals \
+IMGCACHE_ROOT=/shared \
 IMGCACHE_ENDPOINT='tcp://*:5555' \
 uv run imgcache-zmq-worker
 ```
@@ -123,8 +105,7 @@ Useful defaults:
 
 ```text
 IMGCACHE_ENDPOINT=tcp://*:5555
-IMGCACHE_CACHE_ROOT=/cache
-IMGCACHE_ORIGINALS_ROOT=/originals
+IMGCACHE_ROOT=/data
 IMGCACHE_MAX_WORKERS=4
 IMGCACHE_TTL_SECONDS=604800
 IMGCACHE_LIBVIPS_CONCURRENCY=1
@@ -143,18 +124,16 @@ Build the worker image:
 podman build --format docker -f Containerfile.worker -t imgcache-worker:local .
 ```
 
-Run it with mounted cache/originals and a hard memory limit:
+Run it with a mounted shared root and a hard memory limit:
 
 ```bash
 podman run --rm \
   --memory 512m \
   --memory-swap 512m \
   -p 127.0.0.1:5555:5555 \
-  -e IMGCACHE_CACHE_ROOT=/cache \
-  -e IMGCACHE_ORIGINALS_ROOT=/originals \
+  -e IMGCACHE_ROOT=/data \
   -e IMGCACHE_ENDPOINT='tcp://*:5555' \
-  -v "$PWD/.local/cache:/cache:Z" \
-  -v "$PWD/.local/originals:/originals:Z" \
+  -v "$PWD/.local/imgcache:/data:Z" \
   imgcache-worker:local
 ```
 
@@ -193,7 +172,7 @@ Stress logs are written under `.stress-runs/`.
 
 ## Eviction
 
-TTL eviction removes old files under `nodes/` and `leaves/` by file `mtime`. It does not delete `pinned/`.
+TTL eviction removes old files under `cache/nodes/` and `cache/leaves/` by file `mtime`. It does not delete `cache/pinned/`.
 
 The worker exposes an internal ZMQ `evict_ttl` request, and the underlying function is:
 
@@ -204,7 +183,7 @@ from imgcache.eviction import evict_ttl
 ## Design Notes
 
 - ZMQ is an internal boundary, not a public REST API.
-- Image bytes do not cross ZMQ; clients and workers share cache/original mounts.
+- Image bytes do not cross ZMQ; clients and workers share an imgcache root mount.
 - Clients should not write cache leaves or `.v` nodes.
 - Workers are the only cache writers.
 - Public PDF page numbers are one-based.

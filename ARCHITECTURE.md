@@ -277,7 +277,7 @@ src/imgcache/spec.py
   canonical operation ordering.
 
 src/imgcache/layout.py
-  Root-relative path derivation for raw originals, nodes, pinned nodes, and leaves.
+  Cache-relative path derivation for nodes, pinned nodes, and leaves.
 
 src/imgcache/originals.py
   Content-addressed raw originals store under <root>/raw.
@@ -333,7 +333,7 @@ tests/test_real_assets.py
 scripts/test_worker_container.sh
   Podman smoke test. Builds the worker image, runs a ZMQ worker container with
   a mounted imgcache root, materializes an image derivative from the host
-  client, and verifies the cache leaf plus forced .v node exist.
+  client, and verifies the cache leaf exists.
 
 scripts/stress_worker_memory.sh
   Longer memory stress test. Builds the worker image, runs it with Podman

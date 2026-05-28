@@ -5,7 +5,7 @@ from urllib.request import Request, urlopen
 
 import pyvips
 
-from imgcache import CacheLayout, DerivativeSpec, MaterializePolicy, Operation, RenderWorker, SourceSpec
+from imgcache import CacheLayout, ImageSpec, MaterializePolicy, Operation, RenderWorker, SourceSpec
 
 PDF_URL = "https://ontheline.trincoll.edu/images/bookdown/sample-local-pdf.pdf"
 IMAGE_URL = "https://commons.wikimedia.org/wiki/Special:FilePath/Example_image_not_to_be_used_in_article_namespace.jpg"
@@ -21,7 +21,7 @@ def download(url: str, path: Path) -> Path:
 def test_real_pdf_page_renders_to_png(tmp_path):
     pdf = download(PDF_URL, tmp_path / "sample-local-pdf.pdf")
     source = SourceSpec.from_file(str(pdf), mime="application/pdf")
-    spec = DerivativeSpec.canonical(
+    spec = ImageSpec.canonical(
         source,
         [Operation("render", {"page": 1, "dpi": 75, "colorspace": "srgb"}, MaterializePolicy.FORCE)],
         Operation("encode", {"format": "png"}),
@@ -40,7 +40,7 @@ def test_real_pdf_page_renders_to_png(tmp_path):
 def test_real_commons_image_derivative_to_webp(tmp_path):
     jpg = download(IMAGE_URL, tmp_path / "commons-example.jpg")
     source = SourceSpec.from_file(str(jpg), mime="image/jpeg")
-    spec = DerivativeSpec.canonical(
+    spec = ImageSpec.canonical(
         source,
         [
             Operation("render", {"longest_edge": 256, "colorspace": "srgb"}, MaterializePolicy.FORCE),

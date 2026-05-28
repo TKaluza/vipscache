@@ -28,14 +28,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$RUN_DIR/cache" "$RUN_DIR/originals"
+mkdir -p "$RUN_DIR/shared" "$RUN_DIR/input"
 
 if [[ "$STRESS_MODE" != "warm-cache" && "$STRESS_MODE" != "cold-derivatives" ]]; then
   echo "STRESS_MODE must be warm-cache or cold-derivatives, got: $STRESS_MODE" >&2
   exit 2
 fi
 
-uv run python - "$PDF_URL" "$RUN_DIR/originals/sample-local-pdf.pdf" "$IMAGE_URL" "$RUN_DIR/originals/example.jpg" <<'PY'
+uv run python - "$PDF_URL" "$RUN_DIR/input/sample-local-pdf.pdf" "$IMAGE_URL" "$RUN_DIR/input/example.jpg" <<'PY'
 from pathlib import Path
 from urllib.request import Request, urlopen
 import sys
@@ -68,12 +68,10 @@ podman run \
   --memory "$MEMORY_LIMIT" \
   --memory-swap "$MEMORY_SWAP" \
   --publish "127.0.0.1:${HOST_PORT}:5555" \
-  --env IMGCACHE_CACHE_ROOT=/cache \
   --env IMGCACHE_ENDPOINT=tcp://*:5555 \
   --env IMGCACHE_MAX_WORKERS="$MAX_WORKERS" \
-  --env IMGCACHE_ORIGINALS_ROOT=/originals \
-  --volume "$RUN_DIR/cache:/cache:Z" \
-  --volume "$RUN_DIR/originals:/originals:Z" \
+  --env IMGCACHE_ROOT=/data \
+  --volume "$RUN_DIR/shared:/data:Z" \
   "$IMAGE_NAME" >/dev/null
 
 printf 'timestamp,mem_usage\n' >"$STATS_LOG"
@@ -87,10 +85,9 @@ STATS_PID="$!"
 
 uv run python - \
   "$HOST_PORT" \
-  "$RUN_DIR/cache" \
-  "$RUN_DIR/originals" \
-  "$RUN_DIR/originals/example.jpg" \
-  "$RUN_DIR/originals/sample-local-pdf.pdf" \
+  "$RUN_DIR/shared" \
+  "$RUN_DIR/input/example.jpg" \
+  "$RUN_DIR/input/sample-local-pdf.pdf" \
   "$STRESS_DURATION_SECONDS" \
   "$STRESS_CONCURRENCY" \
   "$STRESS_MODE" \
@@ -100,39 +97,29 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 import json
-import shutil
 import sys
 import threading
 import time
 
-from imgcache import CacheLayout, DerivativeSpec, MaterializePolicy, Operation, SourceSpec, ThinClient
-from imgcache.hash import file_id
+from imgcache import CacheLayout, ImageSpec, ImgCacheClient, MaterializePolicy, Operation
 from imgcache.zmq_client import ZmqWorkerClient
 
 
 port = sys.argv[1]
-cache_root = Path(sys.argv[2])
-originals_root = Path(sys.argv[3])
-image_path = Path(sys.argv[4])
-pdf_path = Path(sys.argv[5])
-duration_seconds = int(sys.argv[6])
-concurrency = int(sys.argv[7])
-stress_mode = sys.argv[8]
-workload_log = Path(sys.argv[9])
+root = Path(sys.argv[2])
+image_path = Path(sys.argv[3])
+pdf_path = Path(sys.argv[4])
+duration_seconds = int(sys.argv[5])
+concurrency = int(sys.argv[6])
+stress_mode = sys.argv[7]
+workload_log = Path(sys.argv[8])
 endpoint = f"tcp://127.0.0.1:{port}"
-layout = CacheLayout(cache_root)
+layout = CacheLayout(root / "cache")
 
 
-def install_original(path: Path, mime: str) -> SourceSpec:
-    digest = file_id(path)
-    stored = originals_root / digest
-    if not stored.exists():
-        shutil.copyfile(path, stored)
-    return SourceSpec(file_id=digest, original_path=f"/originals/{digest}", mime=mime)
-
-
-image_source = install_original(image_path, "image/jpeg")
-pdf_source = install_original(pdf_path, "application/pdf")
+ingest_client = ImgCacheClient(root)
+image_source = ingest_client.open(image_path, mime="image/jpeg").source
+pdf_source = ingest_client.open(pdf_path, mime="application/pdf").source
 
 
 deadline = time.monotonic() + 60
@@ -149,7 +136,7 @@ else:
     raise SystemExit(f"worker did not become ready: {last_error}")
 
 
-def image_spec(index: int) -> DerivativeSpec:
+def image_spec(index: int) -> ImageSpec:
     longest = 320 + (index % 21) * 24
     quality = 68 + (index % 20)
     rotate = (index % 4) * 90
@@ -158,14 +145,14 @@ def image_spec(index: int) -> DerivativeSpec:
         Operation("fast_rotate", {"degrees": rotate}),
         Operation("scale", {"longest_edge": longest}, MaterializePolicy.FORCE if index % 11 == 0 else MaterializePolicy.NEVER),
     ]
-    return DerivativeSpec.canonical(
+    return ImageSpec.canonical(
         image_source,
         operations,
         Operation("encode", {"format": "webp", "quality": quality}),
     )
 
 
-def pdf_spec(index: int) -> DerivativeSpec:
+def pdf_spec(index: int) -> ImageSpec:
     dpi = [72, 90, 110, 130][index % 4]
     longest = 420 + (index % 19) * 30
     quality = 70 + (index % 18)
@@ -173,7 +160,7 @@ def pdf_spec(index: int) -> DerivativeSpec:
         Operation("render", {"page": 1, "dpi": dpi, "colorspace": "srgb"}, MaterializePolicy.FORCE if index % 9 == 0 else MaterializePolicy.NEVER),
         Operation("scale", {"longest_edge": longest}),
     ]
-    return DerivativeSpec.canonical(
+    return ImageSpec.canonical(
         pdf_source,
         operations,
         Operation("encode", {"format": "webp", "quality": quality}),
@@ -193,7 +180,7 @@ def next_index() -> int:
         return value
 
 
-def remove_cached_outputs(spec: DerivativeSpec) -> None:
+def remove_cached_outputs(spec: ImageSpec) -> None:
     layout.leaf_path(spec.leaf.key, spec.leaf.extension).unlink(missing_ok=True)
     for node in spec.nodes:
         if node.materialize in {MaterializePolicy.FORCE, MaterializePolicy.PIN}:
@@ -203,7 +190,7 @@ def remove_cached_outputs(spec: DerivativeSpec) -> None:
 def worker_loop() -> int:
     completed = 0
     with ZmqWorkerClient(endpoint, timeout_ms=120_000, request_retries=1) as worker_client:
-        client = ThinClient(layout, worker_client)
+        client = ImgCacheClient(root, worker_client)
         while time.monotonic() < stop_at:
             index = next_index()
             spec = pdf_spec(index) if index % 2 == 0 else image_spec(index)
@@ -228,7 +215,7 @@ with ThreadPoolExecutor(max_workers=concurrency) as executor:
         completed += future.result()
 
 summary = {
-    "cache_bytes": sum(path.stat().st_size for path in cache_root.rglob("*") if path.is_file()),
+    "cache_bytes": sum(path.stat().st_size for path in layout.root.rglob("*") if path.is_file()),
     "completed": completed,
     "duration_seconds": round(time.time() - started, 3),
     "errors": errors[:20],
@@ -243,7 +230,7 @@ kill "$STATS_PID" >/dev/null 2>&1 || true
 wait "$STATS_PID" >/dev/null 2>&1 || true
 unset STATS_PID
 
-uv run python - "$STATS_LOG" "$WORKLOAD_LOG" "$RUN_DIR/cache" <<'PY'
+uv run python - "$STATS_LOG" "$WORKLOAD_LOG" "$RUN_DIR/shared/cache" <<'PY'
 from __future__ import annotations
 
 from pathlib import Path

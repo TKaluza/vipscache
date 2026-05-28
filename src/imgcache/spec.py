@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
-from pathlib import PurePosixPath
 from typing import Any, Literal
 
 from imgcache.hash import file_id as compute_file_id
@@ -17,19 +16,34 @@ class MaterializePolicy(StrEnum):
     PIN = "pin"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False, eq=False)
 class SourceSpec:
     file_id: str
-    original_path: str
     mime: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    original_path: str | None = None
+
+    def __init__(
+        self,
+        file_id: str,
+        original_path: str | None = None,
+        mime: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        # original_path is accepted as a local compatibility hint, but it is
+        # deliberately omitted from payloads and key data.
+        object.__setattr__(self, "file_id", file_id)
+        object.__setattr__(self, "mime", mime)
+        object.__setattr__(self, "metadata", dict(metadata or {}))
+        object.__setattr__(self, "original_path", original_path)
 
     @classmethod
-    def from_file(cls, path: str, *, mime: str | None = None) -> "SourceSpec":
+    def from_file(cls, path: str, *, mime: str | None = None, metadata: dict[str, Any] | None = None) -> "SourceSpec":
         return cls(
             file_id=compute_file_id(path),
-            original_path=PurePosixPath(path).as_posix(),
             mime=mime,
+            metadata=metadata,
+            original_path=path,
         )
 
     def to_key_data(self) -> dict[str, Any]:
@@ -37,8 +51,15 @@ class SourceSpec:
             "file_id": self.file_id,
             "metadata": self.metadata,
             "mime": self.mime,
-            "original_path": self.original_path,
         }
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, SourceSpec):
+            return NotImplemented
+        return self.to_key_data() == other.to_key_data()
+
+    def __hash__(self) -> int:
+        return hash(hash_canonical(self.to_key_data()))
 
     def to_payload(self) -> dict[str, Any]:
         return self.to_key_data()
@@ -47,7 +68,6 @@ class SourceSpec:
     def from_payload(cls, payload: dict[str, Any]) -> "SourceSpec":
         return cls(
             file_id=payload["file_id"],
-            original_path=payload["original_path"],
             mime=payload.get("mime"),
             metadata=payload.get("metadata", {}),
         )
@@ -55,7 +75,10 @@ class SourceSpec:
     def is_pdf(self) -> bool:
         if self.mime == "application/pdf":
             return True
-        return self.original_path.lower().endswith(".pdf")
+        filename = str(self.metadata.get("filename", ""))
+        if filename.lower().endswith(".pdf"):
+            return True
+        return bool(self.original_path and self.original_path.lower().endswith(".pdf"))
 
 
 @dataclass(frozen=True)
@@ -183,10 +206,52 @@ class EncodeSpec:
 
 
 @dataclass(frozen=True)
-class DerivativeSpec:
+class ImageSpec:
     source: SourceSpec
-    nodes: tuple[NodeSpec, ...]
-    leaf: EncodeSpec
+    operations: tuple[Operation, ...] = ()
+    encode: EncodeSpec | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "operations", tuple(self.operations))
+        if self.encode is not None:
+            object.__setattr__(self, "encode", self._encode_with_current_parent(self.encode))
+
+    @property
+    def nodes(self) -> tuple[NodeSpec, ...]:
+        return self._nodes_for(self._engine_version())
+
+    def _nodes_for(self, engine_version: str) -> tuple[NodeSpec, ...]:
+        parent_key = self.source.file_id
+        nodes: list[NodeSpec] = []
+        for operation in self.operations:
+            node = NodeSpec(parent_key, operation, engine_version)
+            nodes.append(node)
+            parent_key = node.key
+        return tuple(nodes)
+
+    @property
+    def parent_key(self) -> str:
+        return self._parent_key_for(self._engine_version())
+
+    def _parent_key_for(self, engine_version: str) -> str:
+        nodes = self._nodes_for(engine_version)
+        if nodes:
+            return nodes[-1].key
+        return self.source.file_id
+
+    @property
+    def leaf(self) -> EncodeSpec:
+        if self.encode is None:
+            raise ValueError("ImageSpec has no encode")
+        return self._encode_with_current_parent(self.encode)
+
+    @property
+    def is_original(self) -> bool:
+        return not self.operations and self.encode is None
+
+    @property
+    def is_materializable_leaf(self) -> bool:
+        return self.encode is not None
 
     @classmethod
     def build(
@@ -196,27 +261,9 @@ class DerivativeSpec:
         encode: Operation | EncodeSpec,
         *,
         engine_version: str = ENGINE_VERSION,
-    ) -> "DerivativeSpec":
-        parent_key = source.file_id
-        nodes: list[NodeSpec] = []
-
-        for operation in operations:
-            node = NodeSpec(parent_key, operation, engine_version)
-            nodes.append(node)
-            parent_key = node.key
-
-        if isinstance(encode, EncodeSpec):
-            leaf = encode
-        else:
-            if encode.name != "encode":
-                raise ValueError("final operation must be named 'encode'")
-            output_format = encode.params.get("format")
-            if not output_format:
-                raise ValueError("encode operation requires a 'format' param")
-            params = {k: v for k, v in encode.params.items() if k != "format"}
-            leaf = EncodeSpec(parent_key, output_format, params, engine_version)
-
-        return cls(source=source, nodes=tuple(nodes), leaf=leaf)
+    ) -> "ImageSpec":
+        spec = cls(source=source, operations=tuple(operations))
+        return spec.with_encode(encode, engine_version=engine_version)
 
     @classmethod
     def canonical(
@@ -226,8 +273,8 @@ class DerivativeSpec:
         encode: Operation | EncodeSpec,
         *,
         engine_version: str = ENGINE_VERSION,
-    ) -> "DerivativeSpec":
-        """Build a derivative using the project's stable operation order."""
+    ) -> "ImageSpec":
+        """Build an image spec using the project's stable operation order."""
         return cls.build(
             source,
             canonicalize_operations(source, operations),
@@ -235,20 +282,68 @@ class DerivativeSpec:
             engine_version=engine_version,
         )
 
+    def with_encode(
+        self,
+        encode: Operation | EncodeSpec,
+        *,
+        engine_version: str = ENGINE_VERSION,
+    ) -> "ImageSpec":
+        if isinstance(encode, EncodeSpec):
+            leaf = replace(encode, parent_key=self._parent_key_for(encode.engine_version))
+        else:
+            if encode.name != "encode":
+                raise ValueError("final operation must be named 'encode'")
+            output_format = encode.params.get("format")
+            if not output_format:
+                raise ValueError("encode operation requires a 'format' param")
+            params = {k: v for k, v in encode.params.items() if k != "format"}
+            leaf = EncodeSpec(self._parent_key_for(engine_version), output_format, params, engine_version)
+        return replace(self, encode=leaf)
+
+    def _encode_with_current_parent(self, encode: EncodeSpec) -> EncodeSpec:
+        parent_key = self._parent_key_for(encode.engine_version)
+        if encode.parent_key == parent_key:
+            return encode
+        return replace(encode, parent_key=parent_key)
+
+    def _engine_version(self) -> str:
+        if self.encode is not None:
+            return self.encode.engine_version
+        return ENGINE_VERSION
+
     def to_payload(self) -> dict[str, Any]:
         return {
-            "leaf": self.leaf.to_payload(),
-            "nodes": [node.to_payload() for node in self.nodes],
+            "encode": self._encode_payload(),
+            "operations": [operation.to_payload() for operation in self.operations],
             "source": self.source.to_payload(),
         }
 
     @classmethod
-    def from_payload(cls, payload: dict[str, Any]) -> "DerivativeSpec":
-        return cls(
-            source=SourceSpec.from_payload(payload["source"]),
-            nodes=tuple(NodeSpec.from_payload(node) for node in payload.get("nodes", [])),
-            leaf=EncodeSpec.from_payload(payload["leaf"]),
-        )
+    def from_payload(cls, payload: dict[str, Any]) -> "ImageSpec":
+        if "leaf" in payload or "nodes" in payload:
+            source = SourceSpec.from_payload(payload["source"])
+            operations = tuple(
+                NodeSpec.from_payload(node).operation for node in payload.get("nodes", [])
+            )
+            spec = cls(source=source, operations=operations)
+            return spec.with_encode(EncodeSpec.from_payload(payload["leaf"]))
+
+        source = SourceSpec.from_payload(payload["source"])
+        operations = tuple(Operation.from_payload(operation) for operation in payload.get("operations", []))
+        spec = cls(source=source, operations=operations)
+        encode_payload = payload.get("encode")
+        if encode_payload is None:
+            return spec
+        return spec.with_encode(EncodeSpec.from_payload({"parent_key": spec.parent_key, **encode_payload}))
+
+    def _encode_payload(self) -> dict[str, Any] | None:
+        if self.encode is None:
+            return None
+        return {
+            "engine_version": self.encode.engine_version,
+            "format": self.encode.format,
+            "params": self.encode.params,
+        }
 
 
 def canonicalize_operations(

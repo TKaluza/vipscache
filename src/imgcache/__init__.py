@@ -1,11 +1,11 @@
-from imgcache.client import ThinClient
+from imgcache.client import CachedImage, ImgCacheClient
 from imgcache.layout import CacheLayout
 from imgcache.limits import WorkerLimits
 from imgcache.originals import OriginalsStore
 from imgcache.spec import (
-    DerivativeSpec,
     ENGINE_VERSION,
     EncodeSpec,
+    ImageSpec,
     MaterializePolicy,
     NodeSpec,
     Operation,
@@ -16,16 +16,17 @@ from imgcache.worker import RenderWorker
 
 __all__ = [
     "ENGINE_VERSION",
+    "CachedImage",
     "CacheLayout",
-    "DerivativeSpec",
     "EncodeSpec",
+    "ImageSpec",
+    "ImgCacheClient",
     "MaterializePolicy",
     "NodeSpec",
     "Operation",
     "OriginalsStore",
     "RenderWorker",
     "SourceSpec",
-    "ThinClient",
     "WorkerLimits",
     "canonicalize_operations",
 ]

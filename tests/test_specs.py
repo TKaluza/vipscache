@@ -1,4 +1,4 @@
-from imgcache.spec import DerivativeSpec, EncodeSpec, MaterializePolicy, NodeSpec, Operation, SourceSpec
+from imgcache.spec import ImageSpec, EncodeSpec, MaterializePolicy, NodeSpec, Operation, SourceSpec
 
 
 def test_operation_params_are_canonicalized_for_keys():
@@ -13,12 +13,12 @@ def test_operation_order_is_part_of_derivative_key():
     crop = Operation("crop", {"x": 0, "y": 0, "w": 10, "h": 10})
     rotate = Operation("fast_rotate", {"degrees": 90})
 
-    crop_then_rotate = DerivativeSpec.build(
+    crop_then_rotate = ImageSpec.build(
         source,
         [crop, rotate],
         Operation("encode", {"format": "png"}),
     )
-    rotate_then_crop = DerivativeSpec.build(
+    rotate_then_crop = ImageSpec.build(
         source,
         [rotate, crop],
         Operation("encode", {"format": "png"}),
@@ -42,7 +42,7 @@ def test_operation_defaults_to_no_intermediate_materialization():
 
 def test_canonical_builder_enforces_operation_order_for_pdf():
     source = SourceSpec("file", "/tmp/source.pdf", mime="application/pdf")
-    spec = DerivativeSpec.canonical(
+    spec = ImageSpec.canonical(
         source,
         [
             Operation("crop", {"x": 0, "y": 0, "w": 10, "h": 10}),
@@ -67,7 +67,7 @@ def test_canonical_builder_enforces_operation_order_for_pdf():
 
 def test_canonical_builder_skips_render_for_image_sources():
     source = SourceSpec("file", "/tmp/source.jpg", mime="image/jpeg")
-    spec = DerivativeSpec.canonical(
+    spec = ImageSpec.canonical(
         source,
         [
             Operation("render", {"page": 1, "dpi": 75}, MaterializePolicy.FORCE),
@@ -80,9 +80,9 @@ def test_canonical_builder_skips_render_for_image_sources():
     assert [node.operation.name for node in spec.nodes] == ["colorspace", "crop"]
 
 
-def test_derivative_spec_payload_round_trips():
+def test_image_spec_payload_round_trips():
     source = SourceSpec("file", "/tmp/source.pdf", mime="application/pdf")
-    spec = DerivativeSpec.canonical(
+    spec = ImageSpec.canonical(
         source,
         [
             Operation("render", {"page": 1, "dpi": 75}, MaterializePolicy.FORCE),
@@ -91,6 +91,6 @@ def test_derivative_spec_payload_round_trips():
         Operation("encode", {"format": "png"}),
     )
 
-    restored = DerivativeSpec.from_payload(spec.to_payload())
+    restored = ImageSpec.from_payload(spec.to_payload())
 
     assert restored == spec

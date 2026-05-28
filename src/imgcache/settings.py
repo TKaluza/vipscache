@@ -11,8 +11,10 @@ class WorkerSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="IMGCACHE_")
 
     endpoint: str = "tcp://*:5555"
-    cache_root: Path = Path("/cache")
-    originals_root: Path = Path("/originals")
+    root: Path = Path("/data")
+    cache_root: Path | None = None
+    raw_root: Path | None = None
+    originals_root: Path | None = None
     max_workers: int = Field(default=4, ge=1)
     ttl_seconds: int = Field(default=7 * 24 * 60 * 60, ge=1)
 
@@ -20,6 +22,14 @@ class WorkerSettings(BaseSettings):
     libvips_cache_max_mem_mb: int = Field(default=128, ge=0)
     libvips_cache_max_files: int = Field(default=100, ge=0)
     libvips_cache_max_ops: int = Field(default=0, ge=0)
+
+    @property
+    def effective_cache_root(self) -> Path:
+        return self.cache_root or self.root / "cache"
+
+    @property
+    def effective_raw_root(self) -> Path:
+        return self.raw_root or self.originals_root or self.root / "raw"
 
 
 def configure_libvips(settings: WorkerSettings) -> None:

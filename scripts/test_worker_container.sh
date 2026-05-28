@@ -16,9 +16,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$TMP_DIR/cache" "$TMP_DIR/originals"
+mkdir -p "$TMP_DIR/shared" "$TMP_DIR/input"
 
-uv run python - "$TMP_DIR/originals/source.ppm" <<'PY'
+uv run python - "$TMP_DIR/input/source.ppm" <<'PY'
 from pathlib import Path
 import sys
 
@@ -32,7 +32,7 @@ for y in range(height):
 path.write_bytes(f"P6\n{width} {height}\n255\n".encode("ascii") + pixels)
 PY
 
-uv run python - "$PDF_URL" "$TMP_DIR/originals/sample-local-pdf.pdf" <<'PY'
+uv run python - "$PDF_URL" "$TMP_DIR/input/sample-local-pdf.pdf" <<'PY'
 from pathlib import Path
 from urllib.request import Request, urlopen
 import sys
@@ -49,68 +49,24 @@ podman run \
   --name "$CONTAINER_NAME" \
   --memory "$MEMORY_LIMIT" \
   --publish "127.0.0.1:${HOST_PORT}:5555" \
-  --env IMGCACHE_CACHE_ROOT=/cache \
   --env IMGCACHE_ENDPOINT=tcp://*:5555 \
   --env IMGCACHE_MAX_WORKERS=4 \
-  --env IMGCACHE_ORIGINALS_ROOT=/originals \
-  --volume "$TMP_DIR/cache:/cache:Z" \
-  --volume "$TMP_DIR/originals:/originals:Z" \
+  --env IMGCACHE_ROOT=/data \
+  --volume "$TMP_DIR/shared:/data:Z" \
   "$IMAGE_NAME" >/dev/null
 
-uv run python - "$HOST_PORT" "$TMP_DIR/cache" "$TMP_DIR/originals/source.ppm" "$TMP_DIR/originals/sample-local-pdf.pdf" <<'PY'
+uv run python - "$HOST_PORT" "$TMP_DIR/shared" "$TMP_DIR/input/source.ppm" "$TMP_DIR/input/sample-local-pdf.pdf" <<'PY'
 from pathlib import Path
-import shutil
 import sys
 import time
 
-from imgcache import (
-    CacheLayout,
-    DerivativeSpec,
-    MaterializePolicy,
-    Operation,
-    SourceSpec,
-    ThinClient,
-)
-from imgcache.hash import file_id
+from imgcache import ImgCacheClient
 from imgcache.zmq_client import ZmqWorkerClient
 
 port = sys.argv[1]
-host_cache = Path(sys.argv[2])
+root = Path(sys.argv[2])
 host_source = Path(sys.argv[3])
 host_pdf = Path(sys.argv[4])
-layout = CacheLayout(host_cache)
-
-image_file_id = file_id(host_source)
-image_store_path = host_source.parent / image_file_id
-if not image_store_path.exists():
-    shutil.copyfile(host_source, image_store_path)
-
-pdf_file_id = file_id(host_pdf)
-pdf_store_path = host_pdf.parent / pdf_file_id
-if not pdf_store_path.exists():
-    shutil.copyfile(host_pdf, pdf_store_path)
-
-image_source = SourceSpec(
-    file_id=image_file_id,
-    original_path=f"/originals/{image_file_id}",
-    mime="image/x-portable-pixmap",
-)
-image_spec = DerivativeSpec.build(
-    image_source,
-    [Operation("render", {"width": 32}, MaterializePolicy.FORCE)],
-    Operation("encode", {"format": "png"}),
-)
-
-pdf_source = SourceSpec(
-    file_id=pdf_file_id,
-    original_path=f"/originals/{pdf_file_id}",
-    mime="application/pdf",
-)
-pdf_spec = DerivativeSpec.canonical(
-    pdf_source,
-    [Operation("render", {"page": 1, "dpi": 75, "colorspace": "srgb"}, MaterializePolicy.FORCE)],
-    Operation("encode", {"format": "png"}),
-)
 
 deadline = time.time() + 30
 last_error = None
@@ -119,9 +75,9 @@ while time.time() < deadline:
         with ZmqWorkerClient(f"tcp://127.0.0.1:{port}", timeout_ms=1_000, request_retries=0) as worker:
             if not worker.healthcheck():
                 raise RuntimeError("worker healthcheck failed")
-            client = ThinClient(layout, worker)
-            image_path = client.get(image_spec)
-            pdf_path = client.get(pdf_spec)
+            client = ImgCacheClient(root, worker)
+            image_path = client.open(host_source, mime="image/x-portable-pixmap").scale(width=32).png().path()
+            pdf_path = client.open(host_pdf, mime="application/pdf").page(1, dpi=75).png().path()
         break
     except Exception as error:
         last_error = error
@@ -132,11 +88,6 @@ else:
 for path in (image_path, pdf_path):
     if not path.exists():
         raise SystemExit(f"expected output path does not exist: {path}")
-
-for spec in (image_spec, pdf_spec):
-    node_path = layout.node_path(spec.nodes[0].key)
-    if not node_path.exists():
-        raise SystemExit(f"expected forced node does not exist: {node_path}")
 
 print(image_path)
 print(pdf_path)

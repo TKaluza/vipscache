@@ -16,7 +16,13 @@ class OriginalsStore:
     def path_for(self, source_file_id: str) -> Path:
         return self.root / source_file_id
 
-    def put(self, path: str | Path, *, mime: str | None = None) -> SourceSpec:
+    def put(
+        self,
+        path: str | Path,
+        *,
+        mime: str | None = None,
+        metadata: dict[str, object] | None = None,
+    ) -> SourceSpec:
         source_path = Path(path)
         source_file_id = file_id(source_path)
         stored_path = self.path_for(source_file_id)
@@ -35,8 +41,10 @@ class OriginalsStore:
                     pass
                 raise
 
+        source_metadata = {"filename": source_path.name}
+        source_metadata.update(metadata or {})
         return SourceSpec(
             file_id=source_file_id,
-            original_path=stored_path.as_posix(),
             mime=mime,
+            metadata=source_metadata,
         )

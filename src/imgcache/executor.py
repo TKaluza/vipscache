@@ -7,10 +7,10 @@ from imgcache.spec import EncodeSpec, NodeSpec, SourceSpec
 
 
 class ImageExecutor(Protocol):
-    def load_source(self, source: SourceSpec) -> Any:
+    def load_source(self, path: Path) -> Any:
         ...
 
-    def render_source(self, source: SourceSpec, spec: NodeSpec) -> Any:
+    def render_source(self, source: SourceSpec, path: Path, spec: NodeSpec) -> Any:
         ...
 
     def load_node(self, path: Path) -> Any:
@@ -36,13 +36,13 @@ class VipsExecutor:
             raise RuntimeError("RenderWorker requires pyvips; install imgcache[worker].") from error
         self._pyvips = pyvips
 
-    def load_source(self, source: SourceSpec) -> Any:
-        return self._pyvips.Image.new_from_file(source.original_path, access="random")
+    def load_source(self, path: Path) -> Any:
+        return self._pyvips.Image.new_from_file(str(path), access="random")
 
-    def render_source(self, source: SourceSpec, spec: NodeSpec) -> Any:
+    def render_source(self, source: SourceSpec, path: Path, spec: NodeSpec) -> Any:
         if self._is_pdf(source):
-            return self._render_pdf(source, spec.operation.params)
-        return self.apply_node(self.load_source(source), spec)
+            return self._render_pdf(path, spec.operation.params)
+        return self.apply_node(self.load_source(path), spec)
 
     def load_node(self, path: Path) -> Any:
         with path.open("rb"):
@@ -112,7 +112,7 @@ class VipsExecutor:
             return self._resize(rendered, width, height, longest_edge, scale_factor)
         return rendered
 
-    def _render_pdf(self, source: SourceSpec, params: dict[str, object]) -> Any:
+    def _render_pdf(self, path: Path, params: dict[str, object]) -> Any:
         options: dict[str, object] = {"access": "random"}
         page = int(params.get("page", 1))
         if page < 1:
@@ -138,7 +138,7 @@ class VipsExecutor:
         if "background" in params:
             options["background"] = params["background"]
 
-        rendered = self._pyvips.Image.pdfload(source.original_path, **options)
+        rendered = self._pyvips.Image.pdfload(str(path), **options)
         rendered = self._colorspace(rendered, str(params.get("colorspace", "srgb")))
         if width is not None or height is not None or longest_edge is not None:
             return self._resize(rendered, width, height, longest_edge, None)
@@ -198,6 +198,4 @@ class VipsExecutor:
         return image
 
     def _is_pdf(self, source: SourceSpec) -> bool:
-        if source.mime == "application/pdf":
-            return True
-        return source.original_path.lower().endswith(".pdf")
+        return source.is_pdf()

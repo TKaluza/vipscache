@@ -8,7 +8,7 @@ from typing import Any
 from imgcache.eviction import evict_ttl
 from imgcache.layout import CacheLayout
 from imgcache.settings import WorkerSettings, configure_libvips
-from imgcache.spec import DerivativeSpec
+from imgcache.spec import ImageSpec
 from imgcache.worker import RenderWorker
 
 
@@ -18,7 +18,9 @@ class ZmqWorkerServer:
         endpoint: str,
         *,
         worker: RenderWorker | None = None,
+        root: str | Path | None = None,
         cache_root: str | Path | None = None,
+        raw_root: str | Path | None = None,
         context: Any | None = None,
         max_workers: int = 1,
         ttl_seconds: int = 7 * 24 * 60 * 60,
@@ -28,15 +30,21 @@ class ZmqWorkerServer:
         except ImportError as error:
             raise RuntimeError("ZmqWorkerServer requires pyzmq; install imgcache[worker].") from error
 
-        if worker is None and cache_root is None:
-            raise ValueError("either worker or cache_root is required")
+        if worker is None and root is None and cache_root is None:
+            raise ValueError("worker, root, or cache_root is required")
 
         self._zmq = zmq
         self._context = context or zmq.Context.instance()
         self.endpoint = endpoint
         self.max_workers = max_workers
         self.ttl_seconds = ttl_seconds
-        self.worker = worker or RenderWorker(CacheLayout(cache_root))
+        if worker is not None:
+            self.worker = worker
+        elif root is not None:
+            root_path = Path(root)
+            self.worker = RenderWorker(CacheLayout(root_path / "cache"), raw_root=root_path / "raw")
+        else:
+            self.worker = RenderWorker(CacheLayout(cache_root), raw_root=raw_root)
         self._running = threading.Event()
         self._socket = None
         self._frontend = None
@@ -143,7 +151,7 @@ class ZmqWorkerServer:
             }
 
         try:
-            spec = DerivativeSpec.from_payload(request["spec"])
+            spec = ImageSpec.from_payload(request["spec"])
             path = self.worker.materialize(spec)
         except Exception as error:
             return {
@@ -154,7 +162,11 @@ class ZmqWorkerServer:
                 "ok": False,
             }
 
-        return {"ok": True, "path": str(path)}
+        try:
+            relpath = Path("cache", *path.relative_to(self.worker.layout.root).parts)
+        except ValueError:
+            relpath = path
+        return {"ok": True, "relpath": relpath.as_posix()}
 
     def close(self) -> None:
         self._running.clear()
@@ -172,15 +184,21 @@ class ZmqWorkerServer:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run an imgcache ZeroMQ render worker.")
     parser.add_argument("--endpoint", help="ZMQ endpoint to bind, e.g. tcp://*:5555")
+    parser.add_argument("--root", help="Shared imgcache root mounted into the worker")
     parser.add_argument("--cache-root", help="Shared cache root mounted into the worker")
+    parser.add_argument("--raw-root", help="Shared raw/originals root mounted into the worker")
     parser.add_argument("--max-workers", type=int, help="Maximum concurrent render jobs")
     parser.add_argument("--ttl-seconds", type=int, help="TTL for file-based eviction")
     args = parser.parse_args(argv)
     settings = WorkerSettings()
     if args.endpoint is not None:
         settings.endpoint = args.endpoint
+    if args.root is not None:
+        settings.root = Path(args.root)
     if args.cache_root is not None:
         settings.cache_root = Path(args.cache_root)
+    if args.raw_root is not None:
+        settings.raw_root = Path(args.raw_root)
     if args.max_workers is not None:
         settings.max_workers = args.max_workers
     if args.ttl_seconds is not None:
@@ -190,7 +208,13 @@ def main(argv: list[str] | None = None) -> int:
 
     with ZmqWorkerServer(
         settings.endpoint,
-        cache_root=settings.cache_root,
+        root=(
+            settings.root
+            if settings.cache_root is None and settings.raw_root is None and settings.originals_root is None
+            else None
+        ),
+        cache_root=settings.effective_cache_root,
+        raw_root=settings.effective_raw_root,
         max_workers=settings.max_workers,
         ttl_seconds=settings.ttl_seconds,
     ) as server:
