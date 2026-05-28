@@ -8,7 +8,8 @@ __pycache__/
 
 # Distribution / packaging
 *.md
-!ARCHITECTURE.md
+
+.stress-runs/
 .Python
 build/
 develop-eggs/
