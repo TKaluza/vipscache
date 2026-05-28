@@ -241,7 +241,7 @@ import sys
 
 stats_log = Path(sys.argv[1])
 workload_log = Path(sys.argv[2])
-cache_root = Path(sys.argv[3])
+cache_dir = Path(sys.argv[3])
 
 
 def to_mib(value: str) -> float | None:
@@ -273,7 +273,7 @@ print(f"  mode: {workload['mode']}")
 print(f"  completed: {workload['completed']}")
 print(f"  errors: {workload['error_count']}")
 print(f"  cache_bytes: {workload['cache_bytes']}")
-print(f"  cache_files: {sum(1 for path in cache_root.rglob('*') if path.is_file())}")
+print(f"  cache_files: {sum(1 for path in cache_dir.rglob('*') if path.is_file())}")
 if samples:
     print(f"  mem_samples: {len(samples)}")
     print(f"  mem_peak_mib: {max(samples):.2f}")

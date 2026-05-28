@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from imgcache.settings import WorkerSettings
 
 
@@ -16,8 +14,6 @@ def test_worker_settings_reads_prefixed_environment(monkeypatch):
     assert settings.ttl_seconds == 123
     assert settings.libvips_cache_max_mem_mb == 64
     assert settings.libvips_cache_max_ops == 0
-    assert settings.effective_cache_root == Path("/data/cache")
-    assert settings.effective_raw_root == Path("/data/raw")
 
 
 def test_worker_settings_uses_root_for_storage(monkeypatch):
@@ -25,5 +21,4 @@ def test_worker_settings_uses_root_for_storage(monkeypatch):
 
     settings = WorkerSettings()
 
-    assert settings.effective_cache_root == Path("/shared/cache")
-    assert settings.effective_raw_root == Path("/shared/raw")
+    assert str(settings.root) == "/shared"

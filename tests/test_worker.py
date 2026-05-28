@@ -4,7 +4,7 @@ import asyncio
 
 import pyvips
 
-from imgcache import CacheLayout, ImgCacheClient, MaterializePolicy, Operation, RenderWorker, SourceSpec
+from imgcache import CacheLayout, ImgCacheClient, MaterializePolicy, Operation, RenderWorker
 from imgcache.limits import WorkerLimits
 from imgcache.spec import ImageSpec
 
@@ -20,15 +20,16 @@ def make_image(path: Path) -> None:
 
 
 def test_worker_materializes_forced_node_and_leaf(tmp_path):
+    root = tmp_path / "shared"
     source_path = tmp_path / "source.ppm"
     make_image(source_path)
 
-    source = SourceSpec.from_file(str(source_path), mime="image/png")
+    source = ImgCacheClient(root).open(source_path, mime="image/png").source
     render = Operation("render", {"width": 32}, MaterializePolicy.FORCE)
     crop = Operation("crop", {"x": 4, "y": 4, "w": 16, "h": 12}, MaterializePolicy.NEVER)
     spec = ImageSpec.build(source, [render, crop], Operation("encode", {"format": "png"}))
 
-    layout = CacheLayout(tmp_path / "cache")
+    layout = CacheLayout(root / "cache")
     worker = RenderWorker(layout)
     path = worker.materialize(spec)
 
@@ -41,14 +42,15 @@ def test_worker_materializes_forced_node_and_leaf(tmp_path):
 
 
 def test_worker_reuses_deepest_materialized_parent(tmp_path):
+    root = tmp_path / "shared"
     source_path = tmp_path / "source.ppm"
     make_image(source_path)
-    source = SourceSpec.from_file(str(source_path), mime="image/png")
+    source = ImgCacheClient(root).open(source_path, mime="image/png").source
     render = Operation("render", {"width": 32}, MaterializePolicy.FORCE)
     crop = Operation("crop", {"x": 0, "y": 0, "w": 10, "h": 10}, MaterializePolicy.NEVER)
     webp = ImageSpec.build(source, [render, crop], Operation("encode", {"format": "webp", "quality": 80}))
     png = ImageSpec.build(source, [render, crop], Operation("encode", {"format": "png"}))
-    layout = CacheLayout(tmp_path / "cache")
+    layout = CacheLayout(root / "cache")
     worker = RenderWorker(layout)
 
     first = worker.materialize(webp)
@@ -65,7 +67,7 @@ def test_img_cache_client_original_fallback_and_materialized_derivative(tmp_path
     source_path = tmp_path / "source.ppm"
     make_image(source_path)
     root = tmp_path / "shared"
-    worker = RenderWorker(CacheLayout(root / "cache"), raw_root=root / "raw")
+    worker = RenderWorker(CacheLayout(root / "cache"))
     client = ImgCacheClient(root, worker)
 
     image = client.open(source_path, mime="image/png")
@@ -98,7 +100,7 @@ def test_async_cached_image_api(tmp_path):
     source_path = tmp_path / "source.ppm"
     make_image(source_path)
     root = tmp_path / "shared"
-    worker = RenderWorker(CacheLayout(root / "cache"), raw_root=root / "raw")
+    worker = RenderWorker(CacheLayout(root / "cache"))
     client = ImgCacheClient(root, worker)
 
     async def run():
@@ -114,15 +116,16 @@ def test_async_cached_image_api(tmp_path):
 
 
 def test_worker_enforces_limits(tmp_path):
+    root = tmp_path / "shared"
     source_path = tmp_path / "source.ppm"
     make_image(source_path)
-    source = SourceSpec.from_file(str(source_path), mime="image/png")
+    source = ImgCacheClient(root).open(source_path, mime="image/png").source
     spec = ImageSpec.build(
         source,
         [Operation("render", {"width": 20})],
         Operation("encode", {"format": "png"}),
     )
-    worker = RenderWorker(CacheLayout(tmp_path / "cache"), limits=WorkerLimits(max_output_pixels=10))
+    worker = RenderWorker(CacheLayout(root / "cache"), limits=WorkerLimits(max_output_pixels=10))
 
     try:
         worker.materialize(spec)

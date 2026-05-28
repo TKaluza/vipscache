@@ -9,7 +9,7 @@ def test_operation_params_are_canonicalized_for_keys():
 
 
 def test_operation_order_is_part_of_derivative_key():
-    source = SourceSpec("file", "/tmp/source.png")
+    source = SourceSpec("file", mime="image/png")
     crop = Operation("crop", {"x": 0, "y": 0, "w": 10, "h": 10})
     rotate = Operation("fast_rotate", {"degrees": 90})
 
@@ -41,7 +41,7 @@ def test_operation_defaults_to_no_intermediate_materialization():
 
 
 def test_canonical_builder_enforces_operation_order_for_pdf():
-    source = SourceSpec("file", "/tmp/source.pdf", mime="application/pdf")
+    source = SourceSpec("file", mime="application/pdf")
     spec = ImageSpec.canonical(
         source,
         [
@@ -66,7 +66,7 @@ def test_canonical_builder_enforces_operation_order_for_pdf():
 
 
 def test_canonical_builder_skips_render_for_image_sources():
-    source = SourceSpec("file", "/tmp/source.jpg", mime="image/jpeg")
+    source = SourceSpec("file", mime="image/jpeg")
     spec = ImageSpec.canonical(
         source,
         [
@@ -81,7 +81,7 @@ def test_canonical_builder_skips_render_for_image_sources():
 
 
 def test_image_spec_payload_round_trips():
-    source = SourceSpec("file", "/tmp/source.pdf", mime="application/pdf")
+    source = SourceSpec("file", mime="application/pdf")
     spec = ImageSpec.canonical(
         source,
         [

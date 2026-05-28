@@ -12,7 +12,6 @@ def test_originals_store_copies_file_to_flat_hash_path(tmp_path):
     spec = store.put(source, mime="application/octet-stream")
 
     assert spec.file_id == file_id(source)
-    assert spec.original_path is None
     assert spec.to_payload() == {
         "file_id": spec.file_id,
         "metadata": {"filename": "source.bin"},

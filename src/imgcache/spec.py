@@ -4,7 +4,6 @@ from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import Any, Literal
 
-from imgcache.hash import file_id as compute_file_id
 from imgcache.hash import hash_canonical
 
 ENGINE_VERSION = "imgcache-v1"
@@ -16,35 +15,14 @@ class MaterializePolicy(StrEnum):
     PIN = "pin"
 
 
-@dataclass(frozen=True, init=False, eq=False)
+@dataclass(frozen=True)
 class SourceSpec:
     file_id: str
     mime: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
-    original_path: str | None = None
 
-    def __init__(
-        self,
-        file_id: str,
-        original_path: str | None = None,
-        mime: str | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> None:
-        # original_path is accepted as a local compatibility hint, but it is
-        # deliberately omitted from payloads and key data.
-        object.__setattr__(self, "file_id", file_id)
-        object.__setattr__(self, "mime", mime)
-        object.__setattr__(self, "metadata", dict(metadata or {}))
-        object.__setattr__(self, "original_path", original_path)
-
-    @classmethod
-    def from_file(cls, path: str, *, mime: str | None = None, metadata: dict[str, Any] | None = None) -> "SourceSpec":
-        return cls(
-            file_id=compute_file_id(path),
-            mime=mime,
-            metadata=metadata,
-            original_path=path,
-        )
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "metadata", dict(self.metadata))
 
     def to_key_data(self) -> dict[str, Any]:
         return {
@@ -52,11 +30,6 @@ class SourceSpec:
             "metadata": self.metadata,
             "mime": self.mime,
         }
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, SourceSpec):
-            return NotImplemented
-        return self.to_key_data() == other.to_key_data()
 
     def __hash__(self) -> int:
         return hash(hash_canonical(self.to_key_data()))
@@ -78,7 +51,7 @@ class SourceSpec:
         filename = str(self.metadata.get("filename", ""))
         if filename.lower().endswith(".pdf"):
             return True
-        return bool(self.original_path and self.original_path.lower().endswith(".pdf"))
+        return False
 
 
 @dataclass(frozen=True)
@@ -320,14 +293,6 @@ class ImageSpec:
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> "ImageSpec":
-        if "leaf" in payload or "nodes" in payload:
-            source = SourceSpec.from_payload(payload["source"])
-            operations = tuple(
-                NodeSpec.from_payload(node).operation for node in payload.get("nodes", [])
-            )
-            spec = cls(source=source, operations=operations)
-            return spec.with_encode(EncodeSpec.from_payload(payload["leaf"]))
-
         source = SourceSpec.from_payload(payload["source"])
         operations = tuple(Operation.from_payload(operation) for operation in payload.get("operations", []))
         spec = cls(source=source, operations=operations)

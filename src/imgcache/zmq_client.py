@@ -32,7 +32,7 @@ class ZmqWorkerClient:
     def materialize(self, spec: ImageSpec) -> Path:
         response = self._request({"method": "materialize", "spec": spec.to_payload()})
         if response.get("ok"):
-            return Path(response.get("relpath") or response.get("path", ""))
+            return Path(response["relpath"])
 
         error = response.get("error", {})
         error_type = error.get("type", "WorkerError")
@@ -42,7 +42,7 @@ class ZmqWorkerClient:
     async def amaterialize(self, spec: ImageSpec) -> Path:
         response = await self._arequest({"method": "materialize", "spec": spec.to_payload()})
         if response.get("ok"):
-            return Path(response.get("relpath") or response.get("path", ""))
+            return Path(response["relpath"])
 
         error = response.get("error", {})
         error_type = error.get("type", "WorkerError")

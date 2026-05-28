@@ -16,12 +16,11 @@ class RenderWorker:
         self,
         layout: CacheLayout,
         *,
-        raw_root: str | Path | None = None,
         executor: ImageExecutor | None = None,
         limits: WorkerLimits | None = None,
     ) -> None:
         self.layout = layout
-        self.raw_root = Path(raw_root) if raw_root is not None else self._default_raw_root(layout)
+        self.raw_dir = self._default_raw_dir(layout)
         self.executor = executor or VipsExecutor()
         self.limits = limits or WorkerLimits()
         self._locks: defaultdict[str, Lock] = defaultdict(Lock)
@@ -92,14 +91,9 @@ class RenderWorker:
         )
 
     def _source_path(self, source: SourceSpec) -> Path:
-        raw_path = self.raw_root / source.file_id
-        if raw_path.exists():
-            return raw_path
-        if source.original_path is not None:
-            return Path(source.original_path)
-        return raw_path
+        return self.raw_dir / source.file_id
 
-    def _default_raw_root(self, layout: CacheLayout) -> Path:
+    def _default_raw_dir(self, layout: CacheLayout) -> Path:
         if layout.root.name == "cache":
             return layout.root.parent / "raw"
         return layout.root / "raw"

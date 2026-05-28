@@ -44,7 +44,7 @@ def test_img_cache_client_materializes_miss_over_zmq(tmp_path):
 
 def test_zmq_worker_healthcheck(tmp_path):
     endpoint = f"ipc://{tmp_path / 'health.sock'}"
-    server = ZmqWorkerServer(endpoint, cache_root=tmp_path / "cache")
+    server = ZmqWorkerServer(endpoint, root=tmp_path / "shared")
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
 
@@ -63,18 +63,18 @@ def test_zmq_client_recreates_req_socket_after_timeout():
     first_socket.poll.return_value = 0
     second_socket = Mock()
     second_socket.poll.return_value = zmq.POLLIN
-    second_socket.recv_json.return_value = {"ok": True, "path": "/tmp/out.png"}
+    second_socket.recv_json.return_value = {"ok": True, "relpath": "cache/leaves/out.png"}
     context = Mock()
     context.socket.side_effect = [first_socket, second_socket]
     client = ZmqWorkerClient("tcp://worker:5555", context=context, request_retries=1, timeout_ms=1)
     spec = ImageSpec.build(
-        SourceSpec("file", "/tmp/source.ppm", mime="image/x-portable-pixmap"),
+        SourceSpec("file", mime="image/x-portable-pixmap"),
         [],
         Operation("encode", {"format": "png"}),
     )
 
     path = client.materialize(spec)
 
-    assert path == Path("/tmp/out.png")
+    assert path == Path("cache/leaves/out.png")
     assert first_socket.close.called
     assert context.socket.call_count == 2
