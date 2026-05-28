@@ -7,8 +7,6 @@ __pycache__/
 *.so
 
 # Distribution / packaging
-*.md
-
 .stress-runs/
 .Python
 build/
