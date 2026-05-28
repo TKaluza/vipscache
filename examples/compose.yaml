@@ -1,0 +1,31 @@
+services:
+  worker:
+    build:
+      context: ..
+      dockerfile: Containerfile.worker
+    image: imgcache-worker:local
+    environment:
+      IMGCACHE_CACHE_ROOT: /cache
+      IMGCACHE_ENDPOINT: tcp://*:5555
+      IMGCACHE_LIBVIPS_CACHE_MAX_FILES: "100"
+      IMGCACHE_LIBVIPS_CACHE_MAX_MEM_MB: "128"
+      IMGCACHE_LIBVIPS_CACHE_MAX_OPS: "0"
+      IMGCACHE_LIBVIPS_CONCURRENCY: "1"
+      IMGCACHE_MAX_WORKERS: "4"
+      IMGCACHE_ORIGINALS_ROOT: /originals
+      IMGCACHE_TTL_SECONDS: "604800"
+    volumes:
+      - imgcache-cache:/cache
+      - imgcache-originals:/originals
+    expose:
+      - "5555"
+    healthcheck:
+      test: ["CMD", "imgcache-zmq-healthcheck", "--endpoint", "tcp://127.0.0.1:5555"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  imgcache-cache:
+  imgcache-originals:

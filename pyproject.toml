@@ -1,0 +1,38 @@
+[project]
+name = "imgcache"
+version = "0.1.0"
+description = "Content-addressed derivative cache for images and pages."
+requires-python = ">=3.11"
+dependencies = [
+    "xxhash>=3.5.0",
+]
+
+[project.optional-dependencies]
+client = [
+    "pyzmq>=26.0.0",
+]
+worker = [
+    "pydantic-settings>=2.0.0",
+    "pyvips>=3.0.0",
+    "pyzmq>=26.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "pydantic-settings>=2.0.0",
+    "pyvips>=3.0.0",
+    "pyzmq>=26.0.0",
+    "pytest>=8.0.0",
+]
+
+[project.scripts]
+imgcache-zmq-healthcheck = "imgcache.zmq_client:main"
+imgcache-zmq-worker = "imgcache.zmq_worker:main"
+
+[build-system]
+requires = ["uv_build>=0.11.16,<0.12"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
