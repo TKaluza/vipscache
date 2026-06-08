@@ -42,6 +42,30 @@ def test_img_cache_client_materializes_miss_over_zmq(tmp_path):
     assert path.is_relative_to(root / "cache" / "leaves")
 
 
+def test_img_cache_client_identify_over_zmq(tmp_path):
+    source_path = tmp_path / "source.ppm"
+    make_image(source_path)
+    root = tmp_path / "shared"
+    endpoint = f"ipc://{tmp_path / 'identify.sock'}"
+    server = ZmqWorkerServer(endpoint, root=root)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    with ZmqWorkerClient(endpoint) as worker_client:
+        client = ImgCacheClient(root, worker_client)
+        image = client.open(source_path, mime="image/x-portable-pixmap").scale(width=16)
+        meta = image.identify()
+        size = image.size
+        worker_client.shutdown_worker()
+
+    thread.join(timeout=5)
+    server.close()
+
+    assert meta["width"] == 16
+    assert meta["mode"] == "RGB"
+    assert size == (16, 12)  # 32x24 scaled to width 16
+
+
 def test_zmq_worker_healthcheck(tmp_path):
     endpoint = f"ipc://{tmp_path / 'health.sock'}"
     server = ZmqWorkerServer(endpoint, root=tmp_path / "shared")

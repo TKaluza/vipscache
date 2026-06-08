@@ -200,6 +200,44 @@ Error response:
 }
 ```
 
+The worker also answers an `identify` request. It carries an `ImageSpec` (encode
+optional) and returns libvips-derived metadata for that exact pipeline:
+
+```json
+{
+  "method": "identify",
+  "spec": {
+    "source": {"file_id": "ac045e19e0574d13", "mime": "application/pdf"},
+    "operations": [{"name": "render", "params": {"page": 1, "dpi": 75}}]
+  }
+}
+```
+
+```json
+{
+  "ok": true,
+  "meta": {
+    "width": 620,
+    "height": 876,
+    "bands": 3,
+    "interpretation": "srgb",
+    "mode": "RGB",
+    "has_alpha": false,
+    "dpi": [75.0, 75.0],
+    "n_pages": 1
+  }
+}
+```
+
+`identify` is served by `RenderWorker.measure(spec)`, which runs the same render
+path as `materialize` (load the deepest `.v` parent, then apply operations forward)
+but stops before encoding and reads header fields instead of writing a leaf. Because
+it reuses the materialize path, the reported geometry is guaranteed to equal the
+geometry of the leaf the same spec would produce. This makes libvips the single
+authority for pixel geometry — including PDF `/Rotate` axis swaps and EXIF
+orientation — so consumers never derive crop bounds from a separate source such as
+pypdf. `measure` does not write `.v` nodes as a side effect; it is a read-only probe.
+
 The client uses REQ semantics with a client-side retry pattern:
 
 - Clients poll for replies with a bounded timeout.

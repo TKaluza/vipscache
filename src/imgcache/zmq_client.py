@@ -49,6 +49,26 @@ class ZmqWorkerClient:
         message = error.get("message", "worker request failed")
         raise RuntimeError(f"{error_type}: {message}")
 
+    def identify(self, spec: ImageSpec) -> dict[str, Any]:
+        response = self._request({"method": "identify", "spec": spec.to_payload()})
+        if response.get("ok"):
+            return response["meta"]
+
+        error = response.get("error", {})
+        error_type = error.get("type", "WorkerError")
+        message = error.get("message", "worker request failed")
+        raise RuntimeError(f"{error_type}: {message}")
+
+    async def aidentify(self, spec: ImageSpec) -> dict[str, Any]:
+        response = await self._arequest({"method": "identify", "spec": spec.to_payload()})
+        if response.get("ok"):
+            return response["meta"]
+
+        error = response.get("error", {})
+        error_type = error.get("type", "WorkerError")
+        message = error.get("message", "worker request failed")
+        raise RuntimeError(f"{error_type}: {message}")
+
     def shutdown_worker(self) -> None:
         response = self._request({"method": "shutdown"})
         if not response.get("ok"):

@@ -137,6 +137,20 @@ class ZmqWorkerServer:
                 "ok": True,
             }
 
+        if method == "identify":
+            try:
+                spec = ImageSpec.from_payload(request["spec"])
+                meta = self.worker.measure(spec)
+            except Exception as error:
+                return {
+                    "error": {
+                        "message": str(error),
+                        "type": type(error).__name__,
+                    },
+                    "ok": False,
+                }
+            return {"meta": meta, "ok": True}
+
         if method != "materialize":
             return {
                 "error": {

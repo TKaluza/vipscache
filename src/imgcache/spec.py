@@ -336,7 +336,7 @@ def _operation_stage(source: SourceSpec, operation: Operation) -> int | None:
         return 1
     if operation.name in {"fast_rotate", "flip", "flop"}:
         return 2
-    if operation.name == "crop":
+    if operation.name in {"crop", "crop_fraction"}:
         return 3
     if operation.name in {"scale", "resize"}:
         return 4

@@ -38,6 +38,27 @@ def test_real_pdf_page_renders_to_png(tmp_path):
     assert image.height > 0
 
 
+def test_real_pdf_identify_matches_rendered_leaf(tmp_path):
+    """imgcache-reported page geometry must equal the actual rendered leaf size.
+
+    This is the structural guarantee against the pypdf-mediabox vs libvips-render
+    mismatch (e.g. /Rotate axis swap): a consumer that crops against identify()
+    can never exceed the real rendered bounds.
+    """
+    root = tmp_path / "shared"
+    pdf = download(PDF_URL, tmp_path / "sample-local-pdf.pdf")
+    worker = RenderWorker(CacheLayout(root / "cache"))
+    client = ImgCacheClient(root, worker)
+
+    page = client.open(pdf, mime="application/pdf").page(1, dpi=75)
+    reported = page.size
+    assert page.n_pages >= 1
+
+    output = page.png().path()
+    rendered = pyvips.Image.new_from_file(str(output))
+    assert reported == (rendered.width, rendered.height)
+
+
 def test_real_commons_image_derivative_to_webp(tmp_path):
     root = tmp_path / "shared"
     jpg = download(IMAGE_URL, tmp_path / "commons-example.jpg")

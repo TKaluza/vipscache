@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -118,6 +118,24 @@ class ImgCacheClient:
                 await asyncio.to_thread(self.worker.materialize, spec)  # type: ignore[attr-defined]
             return path
 
+    def identify(self, spec: ImageSpec) -> dict[str, Any]:
+        worker = self.worker
+        if worker is None:
+            raise RuntimeError("metadata requires a worker; create the client with ImgCacheClient.zmq(...)")
+        if hasattr(worker, "identify"):
+            return worker.identify(spec)  # type: ignore[attr-defined]
+        return worker.measure(spec)  # type: ignore[attr-defined]
+
+    async def aidentify(self, spec: ImageSpec) -> dict[str, Any]:
+        worker = self.worker
+        if worker is None:
+            raise RuntimeError("metadata requires a worker; create the client with ImgCacheClient.zmq(...)")
+        if hasattr(worker, "aidentify"):
+            return await worker.aidentify(spec)  # type: ignore[attr-defined]
+        if hasattr(worker, "identify"):
+            return await asyncio.to_thread(worker.identify, spec)  # type: ignore[attr-defined]
+        return await asyncio.to_thread(worker.measure, spec)  # type: ignore[attr-defined]
+
 
 @dataclass(frozen=True)
 class CachedImage:
@@ -125,6 +143,9 @@ class CachedImage:
     source: SourceSpec
     operations: tuple[Operation, ...] = ()
     encode: EncodeSpec | None = None
+    # Lazily fetched libvips metadata for this exact pipeline. init=False so
+    # dataclasses.replace() resets it to None on every derived CachedImage.
+    _meta_cache: dict[str, Any] | None = field(default=None, init=False, compare=False, repr=False)
 
     @property
     def spec(self) -> ImageSpec:
@@ -178,6 +199,24 @@ class CachedImage:
     def crop(self, *, x: int, y: int, w: int, h: int) -> "CachedImage":
         return self._append("crop", {"x": x, "y": y, "w": w, "h": h})
 
+    def crop_fraction(
+        self,
+        *,
+        left: float = 0.0,
+        top: float = 0.0,
+        right: float = 1.0,
+        bottom: float = 1.0,
+    ) -> "CachedImage":
+        """Crop a normalized box (0..1) resolved against the libvips pixel size on the worker.
+
+        Resolution-independent: e.g. ``crop_fraction(bottom=0.5)`` keeps the top half
+        regardless of the source/render resolution.
+        """
+        return self._append(
+            "crop_fraction",
+            {"left": left, "top": top, "right": right, "bottom": bottom},
+        )
+
     def rotate(self, degrees: int | float) -> "CachedImage":
         return self._append("rotate", {"degrees": degrees})
 
@@ -204,6 +243,55 @@ class CachedImage:
 
     def tif(self, **params: Any) -> "CachedImage":
         return self._encode("tif", **params)
+
+    @property
+    def info(self) -> dict[str, Any]:
+        """libvips metadata for this exact pipeline (Pillow-like ``Image.info``)."""
+        return dict(self._meta())
+
+    @property
+    def size(self) -> tuple[int, int]:
+        self._require_raster()
+        meta = self._meta()
+        return (int(meta["width"]), int(meta["height"]))
+
+    @property
+    def width(self) -> int:
+        return self.size[0]
+
+    @property
+    def height(self) -> int:
+        return self.size[1]
+
+    @property
+    def mode(self) -> str:
+        self._require_raster()
+        return str(self._meta()["mode"])
+
+    @property
+    def n_pages(self) -> int:
+        return int(self._meta().get("n_pages", 1))
+
+    def identify(self) -> dict[str, Any]:
+        """Force a metadata fetch and return the full libvips metadata dict."""
+        return dict(self._meta())
+
+    async def ainfo(self) -> dict[str, Any]:
+        if self._meta_cache is None:
+            object.__setattr__(self, "_meta_cache", await self.client.aidentify(self.spec))
+        return dict(self._meta_cache)
+
+    def _meta(self) -> dict[str, Any]:
+        if self._meta_cache is None:
+            object.__setattr__(self, "_meta_cache", self.client.identify(self.spec))
+        return self._meta_cache
+
+    def _is_paged(self) -> bool:
+        return any(operation.name == "render" for operation in self.operations)
+
+    def _require_raster(self) -> None:
+        if self.source.is_pdf() and not self._is_paged():
+            raise ValueError("select a PDF page first with .page(...) before reading size or mode")
 
     def path(self) -> Path:
         return self.client.get(self.spec)
