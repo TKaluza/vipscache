@@ -6,6 +6,7 @@ def test_operation_params_are_canonicalized_for_keys():
     second = NodeSpec("parent", Operation("crop", {"h": 4, "w": 3, "y": 2, "x": 1}))
 
     assert first.key == second.key
+    assert len(first.key) == 32
 
 
 def test_operation_order_is_part_of_derivative_key():
@@ -25,6 +26,26 @@ def test_operation_order_is_part_of_derivative_key():
     )
 
     assert crop_then_rotate.leaf.key != rotate_then_crop.leaf.key
+
+
+def test_spec_keys_and_node_chain_are_cached_properties():
+    source = SourceSpec("file", mime="image/png")
+    spec = ImageSpec.build(
+        source,
+        [
+            Operation("crop", {"x": 0, "y": 0, "w": 10, "h": 10}),
+            Operation("fast_rotate", {"degrees": 90}),
+        ],
+        Operation("encode", {"format": "png"}),
+    )
+
+    nodes = spec.nodes
+
+    assert spec.nodes is nodes
+    assert spec.parent_key == spec._parent_key_for(spec._engine_version())
+    assert [node.key for node in nodes] == [node.key for node in spec._nodes_for(spec._engine_version())]
+    assert nodes[0].key is nodes[0].key
+    assert spec.leaf.key is spec.leaf.key
 
 
 def test_encode_spec_excludes_materialization_policy_from_key():

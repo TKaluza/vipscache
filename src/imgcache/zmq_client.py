@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
 from imgcache.spec import ImageSpec
 
@@ -88,13 +89,28 @@ class ZmqWorkerClient:
         message = error.get("message", "worker request failed")
         raise RuntimeError(f"{error_type}: {message}")
 
+    def stats(self, *, top: int | None = None, key: str | None = None) -> dict[str, Any]:
+        payload: dict[str, Any] = {"method": "stats"}
+        if key is not None:
+            payload["key"] = key
+        if top is not None:
+            payload["top"] = top
+        response = self._request(payload)
+        if response.get("ok"):
+            return response
+
+        error = response.get("error", {})
+        error_type = error.get("type", "WorkerError")
+        message = error.get("message", "worker request failed")
+        raise RuntimeError(f"{error_type}: {message}")
+
     def close(self) -> None:
         socket = getattr(self._local, "socket", None)
         if socket is not None:
             socket.close(linger=0)
             self._local.socket = None
 
-    def __enter__(self) -> "ZmqWorkerClient":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *exc_info: object) -> None:
@@ -102,12 +118,22 @@ class ZmqWorkerClient:
 
     def _request(self, payload: dict[str, Any]) -> dict[str, Any]:
         attempts = self.request_retries + 1
+        deadline = time.monotonic() + (self.timeout_ms / 1000.0) * attempts
         for attempt in range(attempts):
             try:
                 socket = self._socket()
                 socket.send_json(payload)
-                if socket.poll(self.timeout_ms, self._zmq.POLLIN):
-                    return socket.recv_json()
+                while socket.poll(self._poll_ms(deadline), self._zmq.POLLIN):
+                    response = socket.recv_json()
+                    retry_after = _busy_retry_after(response)
+                    if retry_after is None:
+                        return response
+                    # Busy is a regular REP reply: the REQ socket stays usable,
+                    # so resend on the same socket after the advised pause.
+                    if time.monotonic() + retry_after >= deadline:
+                        raise TimeoutError("ZMQ worker stayed busy past the request deadline")
+                    time.sleep(retry_after)
+                    socket.send_json(payload)
             except self._zmq.ZMQError as error:
                 if attempt == attempts - 1:
                     raise RuntimeError(f"ZMQ request failed: {error}") from error
@@ -115,6 +141,10 @@ class ZmqWorkerClient:
             self._reset_socket()
 
         raise TimeoutError(f"ZMQ worker did not reply after {attempts} request attempts")
+
+    def _poll_ms(self, deadline: float) -> int:
+        remaining_ms = int((deadline - time.monotonic()) * 1000)
+        return max(0, min(self.timeout_ms, remaining_ms))
 
     def _new_socket(self):
         socket = self._context.socket(self._zmq.REQ)
@@ -145,14 +175,23 @@ class ZmqWorkerClient:
 
         context = zmq.asyncio.Context.instance()
         attempts = self.request_retries + 1
+        deadline = time.monotonic() + (self.timeout_ms / 1000.0) * attempts
         for attempt in range(attempts):
             socket = context.socket(self._zmq.REQ)
             socket.setsockopt(self._zmq.LINGER, 0)
             socket.connect(self.endpoint)
             try:
                 await socket.send_json(payload)
-                if await socket.poll(self.timeout_ms, self._zmq.POLLIN):
-                    return await socket.recv_json()
+                while await socket.poll(self._poll_ms(deadline), self._zmq.POLLIN):
+                    response = await socket.recv_json()
+                    retry_after = _busy_retry_after(response)
+                    if retry_after is None:
+                        return response
+                    # Busy is a regular REP reply: resend on the same socket.
+                    if time.monotonic() + retry_after >= deadline:
+                        raise TimeoutError("ZMQ worker stayed busy past the request deadline")
+                    await asyncio.sleep(retry_after)
+                    await socket.send_json(payload)
             except self._zmq.ZMQError as error:
                 if attempt == attempts - 1:
                     raise RuntimeError(f"ZMQ request failed: {error}") from error
@@ -161,6 +200,20 @@ class ZmqWorkerClient:
             await asyncio.sleep(0)
 
         raise TimeoutError(f"ZMQ worker did not reply after {attempts} request attempts")
+
+
+def _busy_retry_after(response: dict[str, Any]) -> float | None:
+    """Return the advised pause for a Busy reply, or None for any other reply."""
+    if response.get("ok"):
+        return None
+    error = response.get("error") or {}
+    if error.get("type") != "Busy":
+        return None
+    try:
+        retry_after = float(response.get("retry_after", 0.5))
+    except (TypeError, ValueError):
+        retry_after = 0.5
+    return max(retry_after, 0.0)
 
 
 def main(argv: list[str] | None = None) -> int:

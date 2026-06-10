@@ -2,7 +2,7 @@
 name = "imgcache"
 version = "0.2.0"
 description = "Content-addressed derivative cache for images and pages."
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "xxhash>=3.5.0",
 ]
@@ -12,6 +12,7 @@ client = [
     "pyzmq>=26.0.0",
 ]
 worker = [
+    "lmdb>=1.5.1",
     "pydantic-settings>=2.0.0",
     "pyvips>=3.0.0",
     "pyzmq>=26.0.0",
@@ -19,6 +20,7 @@ worker = [
 
 [dependency-groups]
 dev = [
+    "lmdb>=1.5.1",
     "pydantic-settings>=2.0.0",
     "pyvips>=3.0.0",
     "pyzmq>=26.0.0",

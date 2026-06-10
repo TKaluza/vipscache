@@ -12,9 +12,13 @@ services:
       IMGCACHE_LIBVIPS_CONCURRENCY: "1"
       IMGCACHE_MAX_WORKERS: "4"
       IMGCACHE_ROOT: /data
+      IMGCACHE_STATE_DIR: /state
       IMGCACHE_TTL_SECONDS: "604800"
     volumes:
       - imgcache-data:/data
+      # Worker-local LMDB mmap state. Do not mount this on the shared imgcache
+      # root or on a network filesystem.
+      - imgcache-worker-state:/state
     expose:
       - "5555"
     healthcheck:
@@ -26,3 +30,4 @@ services:
 
 volumes:
   imgcache-data:
+  imgcache-worker-state:

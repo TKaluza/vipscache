@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+from collections import OrderedDict
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Protocol
+from threading import Lock
+from typing import Any, Protocol, Self
 
+from imgcache.hash import file_id
 from imgcache.io import open_cache_hit
 from imgcache.layout import CacheLayout
 from imgcache.originals import OriginalsStore
@@ -14,6 +17,9 @@ from imgcache.spec import EncodeSpec, ImageSpec, Operation, SourceSpec
 TRANSFORMED_WITHOUT_ENCODE = (
     "transformed CachedImage must choose an output format; call .webp(), .png(), or .jpg()"
 )
+_INGEST_MEMO_MAX = 4096
+_INGEST_MEMO_LOCK = Lock()
+_INGEST_MEMO: OrderedDict[tuple[Path, int, int], str] = OrderedDict()
 
 
 class WorkerClient(Protocol):
@@ -27,11 +33,20 @@ class AsyncWorkerClient(Protocol):
 
 
 class ImgCacheClient:
-    def __init__(self, root: str | Path, worker: WorkerClient | AsyncWorkerClient | None = None) -> None:
+    def __init__(
+        self,
+        root: str | Path,
+        worker: WorkerClient | AsyncWorkerClient | None = None,
+        *,
+        metadata_cache_size: int = 4096,
+    ) -> None:
         self.root = Path(root)
         self.raw = OriginalsStore(self.root / "raw")
         self.layout = CacheLayout(self.root / "cache")
         self.worker = worker
+        self._metadata_cache_size = max(0, metadata_cache_size)
+        self._metadata_cache_lock = Lock()
+        self._metadata_cache: OrderedDict[str, dict[str, Any]] = OrderedDict()
 
     @classmethod
     def zmq(
@@ -42,7 +57,7 @@ class ImgCacheClient:
         request_retries: int = 2,
         timeout_ms: int = 300_000,
         context: Any | None = None,
-    ) -> "ImgCacheClient":
+    ) -> Self:
         from imgcache.zmq_client import ZmqWorkerClient
 
         return cls(
@@ -61,8 +76,10 @@ class ImgCacheClient:
         *,
         mime: str | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> "CachedImage":
-        source = self.raw.put(path, mime=mime, metadata=metadata)
+    ) -> CachedImage:
+        source_path = Path(path)
+        source_file_id = _memoized_file_id(source_path)
+        source = self.raw.put(source_path, mime=mime, metadata=metadata, source_file_id=source_file_id)
         return CachedImage(self, source)
 
     async def aopen(
@@ -71,7 +88,7 @@ class ImgCacheClient:
         *,
         mime: str | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> "CachedImage":
+    ) -> CachedImage:
         return await asyncio.to_thread(self.open, path, mime=mime, metadata=metadata)
 
     def path_for(self, spec: ImageSpec) -> Path:
@@ -119,22 +136,53 @@ class ImgCacheClient:
             return path
 
     def identify(self, spec: ImageSpec) -> dict[str, Any]:
+        cached = self._get_metadata(spec.parent_key)
+        if cached is not None:
+            return cached
         worker = self.worker
         if worker is None:
             raise RuntimeError("metadata requires a worker; create the client with ImgCacheClient.zmq(...)")
         if hasattr(worker, "identify"):
-            return worker.identify(spec)  # type: ignore[attr-defined]
-        return worker.measure(spec)  # type: ignore[attr-defined]
+            meta = worker.identify(spec)  # type: ignore[attr-defined]
+        else:
+            meta = worker.measure(spec)  # type: ignore[attr-defined]
+        self._put_metadata(spec.parent_key, meta)
+        return dict(meta)
 
     async def aidentify(self, spec: ImageSpec) -> dict[str, Any]:
+        cached = self._get_metadata(spec.parent_key)
+        if cached is not None:
+            return cached
         worker = self.worker
         if worker is None:
             raise RuntimeError("metadata requires a worker; create the client with ImgCacheClient.zmq(...)")
         if hasattr(worker, "aidentify"):
-            return await worker.aidentify(spec)  # type: ignore[attr-defined]
-        if hasattr(worker, "identify"):
-            return await asyncio.to_thread(worker.identify, spec)  # type: ignore[attr-defined]
-        return await asyncio.to_thread(worker.measure, spec)  # type: ignore[attr-defined]
+            meta = await worker.aidentify(spec)  # type: ignore[attr-defined]
+        elif hasattr(worker, "identify"):
+            meta = await asyncio.to_thread(worker.identify, spec)  # type: ignore[attr-defined]
+        else:
+            meta = await asyncio.to_thread(worker.measure, spec)  # type: ignore[attr-defined]
+        self._put_metadata(spec.parent_key, meta)
+        return dict(meta)
+
+    def _get_metadata(self, key: str) -> dict[str, Any] | None:
+        if self._metadata_cache_size == 0:
+            return None
+        with self._metadata_cache_lock:
+            meta = self._metadata_cache.get(key)
+            if meta is None:
+                return None
+            self._metadata_cache.move_to_end(key)
+            return dict(meta)
+
+    def _put_metadata(self, key: str, meta: dict[str, Any]) -> None:
+        if self._metadata_cache_size == 0:
+            return
+        with self._metadata_cache_lock:
+            self._metadata_cache[key] = dict(meta)
+            self._metadata_cache.move_to_end(key)
+            while len(self._metadata_cache) > self._metadata_cache_size:
+                self._metadata_cache.popitem(last=False)
 
 
 @dataclass(frozen=True)
@@ -151,13 +199,13 @@ class CachedImage:
     def spec(self) -> ImageSpec:
         return ImageSpec(self.source, self.operations, self.encode)
 
-    def page(self, page: int = 1, *, dpi: int | float | None = None, **params: Any) -> "CachedImage":
+    def page(self, page: int = 1, *, dpi: int | float | None = None, **params: Any) -> Self:
         payload = {"page": page, **params}
         if dpi is not None:
             payload["dpi"] = dpi
         return self._append("render", payload)
 
-    def normalize(self, *, colorspace: str = "srgb") -> "CachedImage":
+    def normalize(self, *, colorspace: str = "srgb") -> Self:
         return self._append("normalize", {"colorspace": colorspace})
 
     def scale(
@@ -167,7 +215,7 @@ class CachedImage:
         width: int | None = None,
         height: int | None = None,
         scale_factor: float | None = None,
-    ) -> "CachedImage":
+    ) -> Self:
         return self._append(
             "scale",
             _clean_params(
@@ -185,7 +233,7 @@ class CachedImage:
         height: int | None = None,
         longest_edge: int | None = None,
         scale_factor: float | None = None,
-    ) -> "CachedImage":
+    ) -> Self:
         return self._append(
             "resize",
             _clean_params(
@@ -196,7 +244,7 @@ class CachedImage:
             ),
         )
 
-    def crop(self, *, x: int, y: int, w: int, h: int) -> "CachedImage":
+    def crop(self, *, x: int, y: int, w: int, h: int) -> Self:
         return self._append("crop", {"x": x, "y": y, "w": w, "h": h})
 
     def crop_fraction(
@@ -206,7 +254,7 @@ class CachedImage:
         top: float = 0.0,
         right: float = 1.0,
         bottom: float = 1.0,
-    ) -> "CachedImage":
+    ) -> Self:
         """Crop a normalized box (0..1) resolved against the libvips pixel size on the worker.
 
         Resolution-independent: e.g. ``crop_fraction(bottom=0.5)`` keeps the top half
@@ -217,31 +265,31 @@ class CachedImage:
             {"left": left, "top": top, "right": right, "bottom": bottom},
         )
 
-    def rotate(self, degrees: int | float) -> "CachedImage":
+    def rotate(self, degrees: int | float) -> Self:
         return self._append("rotate", {"degrees": degrees})
 
-    def fast_rotate(self, degrees: int) -> "CachedImage":
+    def fast_rotate(self, degrees: int) -> Self:
         return self._append("fast_rotate", {"degrees": degrees})
 
-    def flip(self) -> "CachedImage":
+    def flip(self) -> Self:
         return self._append("flip")
 
-    def flop(self) -> "CachedImage":
+    def flop(self) -> Self:
         return self._append("flop")
 
-    def webp(self, *, quality: int = 82, **params: Any) -> "CachedImage":
+    def webp(self, *, quality: int = 82, **params: Any) -> Self:
         return self._encode("webp", quality=quality, **params)
 
-    def png(self, **params: Any) -> "CachedImage":
+    def png(self, **params: Any) -> Self:
         return self._encode("png", **params)
 
-    def jpg(self, *, quality: int = 85, **params: Any) -> "CachedImage":
+    def jpg(self, *, quality: int = 85, **params: Any) -> Self:
         return self._encode("jpg", quality=quality, **params)
 
-    def avif(self, *, quality: int = 60, **params: Any) -> "CachedImage":
+    def avif(self, *, quality: int = 60, **params: Any) -> Self:
         return self._encode("avif", quality=quality, **params)
 
-    def tif(self, **params: Any) -> "CachedImage":
+    def tif(self, **params: Any) -> Self:
         return self._encode("tif", **params)
 
     @property
@@ -315,14 +363,14 @@ class CachedImage:
     def __await__(self):
         return self.apath().__await__()
 
-    def _append(self, name: str, params: dict[str, Any] | None = None) -> "CachedImage":
+    def _append(self, name: str, params: dict[str, Any] | None = None) -> Self:
         return replace(
             self,
             operations=self.operations + (Operation(name, params or {}),),
             encode=None,
         )
 
-    def _encode(self, output_format: str, **params: Any) -> "CachedImage":
+    def _encode(self, output_format: str, **params: Any) -> Self:
         spec = ImageSpec(self.source, self.operations)
         encoded = spec.with_encode(Operation("encode", {"format": output_format, **params}))
         return replace(self, encode=encoded.encode)
@@ -330,3 +378,22 @@ class CachedImage:
 
 def _clean_params(**params: Any) -> dict[str, Any]:
     return {key: value for key, value in params.items() if value is not None}
+
+
+def _memoized_file_id(path: Path) -> str:
+    resolved = path.resolve()
+    stat = resolved.stat()
+    key = (resolved, stat.st_mtime_ns, stat.st_size)
+    with _INGEST_MEMO_LOCK:
+        cached = _INGEST_MEMO.get(key)
+        if cached is not None:
+            _INGEST_MEMO.move_to_end(key)
+            return cached
+
+    digest = file_id(resolved)
+    with _INGEST_MEMO_LOCK:
+        _INGEST_MEMO[key] = digest
+        _INGEST_MEMO.move_to_end(key)
+        while len(_INGEST_MEMO) > _INGEST_MEMO_MAX:
+            _INGEST_MEMO.popitem(last=False)
+    return digest

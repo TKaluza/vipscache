@@ -16,7 +16,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$TMP_DIR/shared" "$TMP_DIR/input"
+mkdir -p "$TMP_DIR/shared" "$TMP_DIR/state" "$TMP_DIR/input"
 
 uv run python - "$TMP_DIR/input/source.ppm" <<'PY'
 from pathlib import Path
@@ -52,7 +52,9 @@ podman run \
   --env IMGCACHE_ENDPOINT=tcp://*:5555 \
   --env IMGCACHE_MAX_WORKERS=4 \
   --env IMGCACHE_ROOT=/data \
+  --env IMGCACHE_STATE_DIR=/state \
   --volume "$TMP_DIR/shared:/data:Z" \
+  --volume "$TMP_DIR/state:/state:Z" \
   "$IMAGE_NAME" >/dev/null
 
 uv run python - "$HOST_PORT" "$TMP_DIR/shared" "$TMP_DIR/input/source.ppm" "$TMP_DIR/input/sample-local-pdf.pdf" <<'PY'
@@ -76,8 +78,12 @@ while time.time() < deadline:
             if not worker.healthcheck():
                 raise RuntimeError("worker healthcheck failed")
             client = ImgCacheClient(root, worker)
-            image_path = client.open(host_source, mime="image/x-portable-pixmap").scale(width=32).png().path()
+            image = client.open(host_source, mime="image/x-portable-pixmap")
+            image_path = image.scale(width=32).png().path()
             pdf_path = client.open(host_pdf, mime="application/pdf").page(1, dpi=75).png().path()
+            stats = worker.stats(key=image.source.file_id)
+            if not stats["children"]:
+                raise RuntimeError("worker stats did not record image DAG edges")
         break
     except Exception as error:
         last_error = error

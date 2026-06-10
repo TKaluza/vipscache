@@ -12,7 +12,8 @@ from imgcache.spec import (
     SourceSpec,
     canonicalize_operations,
 )
-from imgcache.worker import RenderWorker
+from imgcache.state import WorkerState
+from imgcache.worker import RenderWorker, WorkerBusyError
 
 __all__ = [
     "ENGINE_VERSION",
@@ -27,6 +28,8 @@ __all__ = [
     "OriginalsStore",
     "RenderWorker",
     "SourceSpec",
+    "WorkerBusyError",
     "WorkerLimits",
+    "WorkerState",
     "canonicalize_operations",
 ]

@@ -14,6 +14,9 @@ class WorkerSettings(BaseSettings):
     root: Path = Path("/data")
     max_workers: int = Field(default=4, ge=1)
     ttl_seconds: int = Field(default=7 * 24 * 60 * 60, ge=1)
+    state_dir: Path | None = None
+    state_map_size_mb: int = Field(default=1024, ge=1)
+    busy_timeout_seconds: float = Field(default=2.0, gt=0)
 
     libvips_concurrency: int = Field(default=1, ge=1)
     libvips_cache_max_mem_mb: int = Field(default=128, ge=0)

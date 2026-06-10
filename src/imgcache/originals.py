@@ -22,9 +22,10 @@ class OriginalsStore:
         *,
         mime: str | None = None,
         metadata: dict[str, object] | None = None,
+        source_file_id: str | None = None,
     ) -> SourceSpec:
         source_path = Path(path)
-        source_file_id = file_id(source_path)
+        source_file_id = source_file_id or file_id(source_path)
         stored_path = self.path_for(source_file_id)
         if not stored_path.exists():
             self.root.mkdir(parents=True, exist_ok=True)

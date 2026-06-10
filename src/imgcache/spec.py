@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
-from typing import Any, Literal
+from functools import cached_property
+from typing import Any, Literal, Self
 
 from imgcache.hash import hash_canonical
 
@@ -38,7 +39,7 @@ class SourceSpec:
         return self.to_key_data()
 
     @classmethod
-    def from_payload(cls, payload: dict[str, Any]) -> "SourceSpec":
+    def from_payload(cls, payload: dict[str, Any]) -> Self:
         return cls(
             file_id=payload["file_id"],
             mime=payload.get("mime"),
@@ -79,7 +80,7 @@ class Operation:
         }
 
     @classmethod
-    def from_payload(cls, payload: dict[str, Any]) -> "Operation":
+    def from_payload(cls, payload: dict[str, Any]) -> Self:
         return cls(
             name=payload["name"],
             params=payload.get("params", {}),
@@ -93,7 +94,7 @@ class NodeSpec:
     operation: Operation
     engine_version: str = ENGINE_VERSION
 
-    @property
+    @cached_property
     def key(self) -> str:
         return hash_canonical(self.to_key_data())
 
@@ -101,7 +102,7 @@ class NodeSpec:
     def materialize(self) -> MaterializePolicy:
         return self.operation.materialize
 
-    def with_materialize(self, policy: MaterializePolicy) -> "NodeSpec":
+    def with_materialize(self, policy: MaterializePolicy) -> Self:
         return replace(
             self,
             operation=replace(self.operation, materialize=policy),
@@ -123,7 +124,7 @@ class NodeSpec:
         }
 
     @classmethod
-    def from_payload(cls, payload: dict[str, Any]) -> "NodeSpec":
+    def from_payload(cls, payload: dict[str, Any]) -> Self:
         return cls(
             parent_key=payload["parent_key"],
             operation=Operation.from_payload(payload["operation"]),
@@ -142,7 +143,7 @@ class EncodeSpec:
         object.__setattr__(self, "format", self.format.lower())
         object.__setattr__(self, "params", dict(sorted(self.params.items())))
 
-    @property
+    @cached_property
     def key(self) -> str:
         return hash_canonical(self.to_key_data())
 
@@ -169,7 +170,7 @@ class EncodeSpec:
         }
 
     @classmethod
-    def from_payload(cls, payload: dict[str, Any]) -> "EncodeSpec":
+    def from_payload(cls, payload: dict[str, Any]) -> Self:
         return cls(
             parent_key=payload["parent_key"],
             format=payload["format"],
@@ -189,7 +190,7 @@ class ImageSpec:
         if self.encode is not None:
             object.__setattr__(self, "encode", self._encode_with_current_parent(self.encode))
 
-    @property
+    @cached_property
     def nodes(self) -> tuple[NodeSpec, ...]:
         return self._nodes_for(self._engine_version())
 
@@ -202,7 +203,7 @@ class ImageSpec:
             parent_key = node.key
         return tuple(nodes)
 
-    @property
+    @cached_property
     def parent_key(self) -> str:
         return self._parent_key_for(self._engine_version())
 
@@ -234,7 +235,7 @@ class ImageSpec:
         encode: Operation | EncodeSpec,
         *,
         engine_version: str = ENGINE_VERSION,
-    ) -> "ImageSpec":
+    ) -> Self:
         spec = cls(source=source, operations=tuple(operations))
         return spec.with_encode(encode, engine_version=engine_version)
 
@@ -246,7 +247,7 @@ class ImageSpec:
         encode: Operation | EncodeSpec,
         *,
         engine_version: str = ENGINE_VERSION,
-    ) -> "ImageSpec":
+    ) -> Self:
         """Build an image spec using the project's stable operation order."""
         return cls.build(
             source,
@@ -260,7 +261,7 @@ class ImageSpec:
         encode: Operation | EncodeSpec,
         *,
         engine_version: str = ENGINE_VERSION,
-    ) -> "ImageSpec":
+    ) -> Self:
         if isinstance(encode, EncodeSpec):
             leaf = replace(encode, parent_key=self._parent_key_for(encode.engine_version))
         else:
@@ -292,7 +293,7 @@ class ImageSpec:
         }
 
     @classmethod
-    def from_payload(cls, payload: dict[str, Any]) -> "ImageSpec":
+    def from_payload(cls, payload: dict[str, Any]) -> Self:
         source = SourceSpec.from_payload(payload["source"])
         operations = tuple(Operation.from_payload(operation) for operation in payload.get("operations", []))
         spec = cls(source=source, operations=operations)

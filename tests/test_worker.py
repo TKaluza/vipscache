@@ -1,10 +1,14 @@
 from pathlib import Path
+from threading import Event, Thread
 
 import asyncio
+import time
 
+import pytest
 import pyvips
 
-from imgcache import CacheLayout, ImgCacheClient, MaterializePolicy, Operation, RenderWorker
+from imgcache import CacheLayout, ImgCacheClient, MaterializePolicy, Operation, RenderWorker, WorkerBusyError
+from imgcache.executor import VipsExecutor
 from imgcache.limits import WorkerLimits
 from imgcache.spec import ImageSpec
 
@@ -113,6 +117,85 @@ def test_async_cached_image_api(tmp_path):
     path, data = asyncio.run(run())
     assert path.exists()
     assert data.startswith(b"\x89PNG")
+
+
+class SlowLeafExecutor(VipsExecutor):
+    """Delays leaf writes so a concurrent duplicate request hits the busy path."""
+
+    def __init__(self, delay: float) -> None:
+        super().__init__()
+        self.delay = delay
+        self.started = Event()
+        self.leaf_writes = 0
+
+    def write_leaf(self, image, spec, path):
+        self.started.set()
+        self.leaf_writes += 1
+        time.sleep(self.delay)
+        super().write_leaf(image, spec, path)
+
+
+def test_worker_duplicate_render_raises_busy_and_cleans_locks(tmp_path):
+    root = tmp_path / "shared"
+    source_path = tmp_path / "source.ppm"
+    make_image(source_path)
+    source = ImgCacheClient(root).open(source_path, mime="image/png").source
+    spec = ImageSpec.build(
+        source,
+        [Operation("scale", {"width": 16})],
+        Operation("encode", {"format": "png"}),
+    )
+    executor = SlowLeafExecutor(delay=0.5)
+    worker = RenderWorker(CacheLayout(root / "cache"), executor=executor, busy_timeout=0.05)
+
+    results = {}
+
+    def render():
+        results["path"] = worker.materialize(spec)
+
+    thread = Thread(target=render)
+    thread.start()
+    assert executor.started.wait(timeout=5)
+
+    with pytest.raises(WorkerBusyError) as excinfo:
+        worker.materialize(spec)
+    assert excinfo.value.retry_after == 0.05
+
+    thread.join(timeout=5)
+    assert results["path"].exists()
+    assert worker._locks._entries == {}
+    assert worker.materialize(spec) == results["path"]
+    assert executor.leaf_writes == 1
+
+
+def test_worker_busy_loser_returns_hit_when_render_finishes_in_time(tmp_path):
+    root = tmp_path / "shared"
+    source_path = tmp_path / "source.ppm"
+    make_image(source_path)
+    source = ImgCacheClient(root).open(source_path, mime="image/png").source
+    spec = ImageSpec.build(
+        source,
+        [Operation("scale", {"width": 16})],
+        Operation("encode", {"format": "png"}),
+    )
+    executor = SlowLeafExecutor(delay=0.2)
+    worker = RenderWorker(CacheLayout(root / "cache"), executor=executor, busy_timeout=5.0)
+
+    results = {}
+
+    def render():
+        results["path"] = worker.materialize(spec)
+
+    thread = Thread(target=render)
+    thread.start()
+    assert executor.started.wait(timeout=5)
+
+    duplicate = worker.materialize(spec)
+
+    thread.join(timeout=5)
+    assert duplicate == results["path"]
+    assert executor.leaf_writes == 1
+    assert worker._locks._entries == {}
 
 
 def test_worker_enforces_limits(tmp_path):

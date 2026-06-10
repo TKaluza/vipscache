@@ -3,13 +3,14 @@ from __future__ import annotations
 import argparse
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
 from imgcache.eviction import evict_ttl
 from imgcache.layout import CacheLayout
 from imgcache.settings import WorkerSettings, configure_libvips
-from imgcache.spec import ImageSpec
-from imgcache.worker import RenderWorker
+from imgcache.spec import ENGINE_VERSION, ImageSpec
+from imgcache.state import WorkerState, state_versions
+from imgcache.worker import RenderWorker, WorkerBusyError
 
 
 class ZmqWorkerServer:
@@ -22,6 +23,9 @@ class ZmqWorkerServer:
         context: Any | None = None,
         max_workers: int = 1,
         ttl_seconds: int = 7 * 24 * 60 * 60,
+        state_dir: str | Path | None = None,
+        state_map_size_mb: int = 1024,
+        busy_timeout_seconds: float = 2.0,
     ) -> None:
         try:
             import zmq
@@ -40,7 +44,28 @@ class ZmqWorkerServer:
             self.worker = worker
         else:
             root_path = Path(root)
-            self.worker = RenderWorker(CacheLayout(root_path / "cache"))
+            state = None
+            if state_dir is not None:
+                probe_worker = RenderWorker(CacheLayout(root_path / "cache"))
+                state = WorkerState(
+                    Path(state_dir),
+                    map_size_mb=state_map_size_mb,
+                    versions=state_versions(
+                        engine_version=ENGINE_VERSION,
+                        libvips=_libvips_version(probe_worker.executor),
+                    ),
+                )
+                self.worker = RenderWorker(
+                    CacheLayout(root_path / "cache"),
+                    executor=probe_worker.executor,
+                    state=state,
+                    busy_timeout=busy_timeout_seconds,
+                )
+            else:
+                self.worker = RenderWorker(
+                    CacheLayout(root_path / "cache"),
+                    busy_timeout=busy_timeout_seconds,
+                )
         self._running = threading.Event()
         self._socket = None
         self._frontend = None
@@ -137,6 +162,26 @@ class ZmqWorkerServer:
                 "ok": True,
             }
 
+        if method == "stats":
+            if self.worker.state is None:
+                return {
+                    "error": {
+                        "message": "worker state is disabled",
+                        "type": "StateDisabled",
+                    },
+                    "ok": False,
+                }
+            if "key" in request:
+                inspection = self.worker.state.inspect(str(request["key"]))
+                return {
+                    "children": inspection["children"],
+                    "ok": True,
+                    "record": inspection["record"],
+                    "record_type": inspection["record_type"],
+                }
+            top = int(request.get("top", 10))
+            return {"nodes": self.worker.state.top_nodes(top), "ok": True}
+
         if method == "identify":
             try:
                 spec = ImageSpec.from_payload(request["spec"])
@@ -163,6 +208,15 @@ class ZmqWorkerServer:
         try:
             spec = ImageSpec.from_payload(request["spec"])
             path = self.worker.materialize(spec)
+        except WorkerBusyError as error:
+            return {
+                "error": {
+                    "message": str(error),
+                    "type": "Busy",
+                },
+                "ok": False,
+                "retry_after": error.retry_after,
+            }
         except Exception as error:
             return {
                 "error": {
@@ -183,8 +237,10 @@ class ZmqWorkerServer:
         for socket in (self._socket, self._frontend, self._backend):
             if socket is not None:
                 socket.close(linger=0)
+        if self.worker.state is not None:
+            self.worker.state.close()
 
-    def __enter__(self) -> "ZmqWorkerServer":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *exc_info: object) -> None:
@@ -215,9 +271,19 @@ def main(argv: list[str] | None = None) -> int:
         root=settings.root,
         max_workers=settings.max_workers,
         ttl_seconds=settings.ttl_seconds,
+        state_dir=settings.state_dir,
+        state_map_size_mb=settings.state_map_size_mb,
+        busy_timeout_seconds=settings.busy_timeout_seconds,
     ) as server:
         server.serve_forever()
     return 0
+
+
+def _libvips_version(executor: Any) -> str:
+    version = getattr(executor, "libvips_version", None)
+    if version is None:
+        return ""
+    return str(version())
 
 
 if __name__ == "__main__":

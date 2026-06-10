@@ -7,6 +7,7 @@ import pytest
 
 from imgcache import CacheLayout, CachedImage, ImgCacheClient, RenderWorker
 from imgcache.spec import SourceSpec
+from imgcache.spec import ImageSpec, Operation
 
 
 def make_image(path: Path, width: int = 64, height: int = 48) -> None:
@@ -121,3 +122,26 @@ def test_async_info(tmp_path):
     info = asyncio.run(image.ainfo())
     assert info["width"] == 20
     assert info["height"] == 15
+
+
+class CountingIdentifyWorker:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def identify(self, spec: ImageSpec) -> dict:
+        self.calls += 1
+        return {"height": 15, "mode": "RGB", "width": 20}
+
+
+def test_client_metadata_memo_saves_duplicate_identify_roundtrip(tmp_path):
+    worker = CountingIdentifyWorker()
+    client = ImgCacheClient(tmp_path / "shared", worker)
+    source = SourceSpec("f" * 32, mime="image/png")
+    first = ImageSpec(source, (Operation("scale", {"width": 20}),))
+    second = ImageSpec(source, (Operation("scale", {"width": 20}),))
+
+    meta = client.identify(first)
+    meta["width"] = 999
+
+    assert client.identify(second)["width"] == 20
+    assert worker.calls == 1

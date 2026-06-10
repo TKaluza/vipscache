@@ -39,6 +39,9 @@ class VipsExecutor:
             raise RuntimeError("RenderWorker requires pyvips; install imgcache[worker].") from error
         self._pyvips = pyvips
 
+    def libvips_version(self) -> str:
+        return ".".join(str(self._pyvips.version(part)) for part in range(3))
+
     def load_source(self, path: Path) -> Any:
         return self._pyvips.Image.new_from_file(str(path), access="random")
 

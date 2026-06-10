@@ -17,17 +17,17 @@ def canonical_json(value: Any) -> bytes:
     ).encode("utf-8")
 
 
-def xxh3_64_hexdigest(data: bytes) -> str:
-    return xxhash.xxh3_64_hexdigest(data)
+def xxh3_128_hexdigest(data: bytes) -> str:
+    return xxhash.xxh3_128_hexdigest(data)
 
 
 def hash_canonical(value: Any) -> str:
-    return xxh3_64_hexdigest(canonical_json(value))
+    return xxh3_128_hexdigest(canonical_json(value))
 
 
 def file_id(path: str | Path, *, chunk_size: int = 1024 * 1024) -> str:
-    hasher = xxhash.xxh3_64()
+    hasher = xxhash.xxh3_128()
     with Path(path).open("rb") as handle:
-        for chunk in iter(lambda: handle.read(chunk_size), b""):
+        while chunk := handle.read(chunk_size):
             hasher.update(chunk)
     return hasher.hexdigest()
