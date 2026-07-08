@@ -127,3 +127,96 @@ STRESS_DURATION_SECONDS=600 scripts/stress_worker_memory.sh         # memory str
 - Duplicate concurrent renders of the same key are coalesced; the ZMQ client handles the internal busy/retry protocol transparently.
 - PDF page numbers are one-based.
 - Design details and invariants live in [ARCHITECTURE.md](ARCHITECTURE.md).
+ 
+ ## Serving to Browsers
+ 
+ imgcache derivatives can be served to browsers through a two-plane web
+ delivery tier: a ZMQ control plane (spec → relpath) and a Caddy data plane
+ (read-only `sendfile` with signed URLs). See the
+ [Web delivery plan](web_delivery_plan_v1.md) for the full design and the
+ [Web delivery tier](ARCHITECTURE.md#web-delivery-tier) section in
+ ARCHITECTURE.md for invariants.
+ 
+ ### Quick start with Docker Compose
+ 
+ The example stack in `examples/compose.yaml` runs three services:
+ 
+ - **worker** — imgcache ZMQ render worker (only cache writer)
+ - **sveltekit** — SvelteKit app with the verifier route and `@imgcache/client`
+ - **caddy** — reverse proxy serving `cache/leaves/` (signed) and
+   `cache/pinned/` (public) over HTTP/2 and HTTP/3
+ 
+ ```bash
+ # Set a real signing secret (32+ random bytes)
+ export IMGCACHE_URL_SIGNING_SECRET="$(openssl rand -hex 32)"
+ 
+ # Build and start the stack
+ docker compose -f examples/compose.yaml up --build
+ ```
+ 
+ Caddy listens on ports 80 and 443 (TCP + UDP for HTTP/3). The SvelteKit app
+ is internal only (port 3000, not published). The worker is internal only
+ (port 5555, not published).
+ 
+ ### Environment variables
+ 
+ | Variable | Service | Purpose |
+ |---|---|---|
+ | `IMGCACHE_URL_SIGNING_SECRET` | sveltekit | HMAC secret for signing leaf URLs (32+ bytes) |
+ | `IMGCACHE_URL_SIGNING_SECRET_PREVIOUS` | sveltekit | Previous secret, accepted during rotation |
+ | `IMGCACHE_ZMQ_ENDPOINT` | sveltekit | Worker ZMQ address (default: `tcp://worker:5555`) |
+ | `IMGCACHE_PUBLIC_BASE_URL` | sveltekit | Public origin for image URLs (e.g. `https://images.example.com`) |
+ | `IMGCACHE_ENDPOINT` | worker | ZMQ bind address (default: `tcp://*:5555`) |
+ | `IMGCACHE_ROOT` | worker | Shared cache root (default: `/data`) |
+ 
+ ### Using `@imgcache/client`
+ 
+ The TypeScript client (`clients/typescript/`) is a **server-side-only**
+ package — it uses native ZMQ sockets and must never be bundled for the
+ browser.
+ 
+ ```bash
+ cd clients/typescript && npm install && npm run build
+ # In your SvelteKit app:
+ npm install /path/to/imgcache/clients/typescript
+ ```
+ 
+ ```ts
+ import { ImgCache, signUrl, publishUrl } from "@imgcache/client";
+ 
+ // Server-side singleton (e.g. in $lib/server/imgcache.ts)
+ const cache = new ImgCache({
+   endpoint: "tcp://worker:5555",
+   timeoutMs: 300_000,
+   retries: 2,
+ });
+ 
+ // Resolve a spec → get relpath → sign a URL for the browser
+ const spec = cache.open(fileId, "application/pdf")
+   .page(1, { dpi: 144 })
+   .scale({ longestEdge: 1024 })
+   .webp({ quality: 82 });
+ const { relpath } = await spec.resolve();
+ const url = signUrl(relpath, { secret: process.env.IMGCACHE_URL_SIGNING_SECRET! });
+ 
+ // Public (pinned) tier — unsigned URL, excluded from eviction
+ const pubUrl = await publishUrl(cache, spec);
+ ```
+ 
+ See `examples/sveltekit/` for a complete reference integration including
+ `srcset` patterns, the verifier route, and deployment notes.
+ 
+ ### Load testing
+ 
+ ```bash
+ # Dry-run (validates URL signing locally, no live endpoint needed)
+ python scripts/load_test.py
+ 
+ # Live (point at a running stack)
+ IMGCACHE_LOAD_TEST_ENDPOINT=https://images.example.com \
+ IMGCACHE_LOAD_TEST_SECRET="$IMGCACHE_URL_SIGNING_SECRET" \
+ IMGCACHE_LOAD_TEST_LEAF_PATH=/cache/leaves/e7/abc...webp \
+ IMGCACHE_LOAD_TEST_PINNED_PATH=/cache/pinned/cd/def...webp \
+ IMGCACHE_LOAD_TEST_DRY_RUN=0 \
+ python scripts/load_test.py
+ ```

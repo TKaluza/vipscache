@@ -28,6 +28,50 @@ services:
       retries: 3
       start_period: 5s
 
+  sveltekit:
+    build:
+      context: ..
+      dockerfile: examples/sveltekit/Dockerfile
+    environment:
+      # 32+ random bytes; required for HMAC URL signing (Milestone 3).
+      IMGCACHE_URL_SIGNING_SECRET: ${IMGCACHE_URL_SIGNING_SECRET:-dev-secret-change-me-32-bytes-min}
+      IMGCACHE_ZMQ_ENDPOINT: tcp://worker:5555
+    expose:
+      - "3000"
+    depends_on:
+      worker:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "const net=require('net');const s=net.connect(3000,'localhost',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3 (h3 via QUIC)
+    volumes:
+      - ../deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Shared cache volume, read-only — worker is the only writer.
+      - imgcache-data:/shared/imgcache:ro,Z
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      sveltekit:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:2019/config/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
 volumes:
   imgcache-data:
   imgcache-worker-state:
+  caddy_data:
+  caddy_config:

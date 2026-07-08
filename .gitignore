@@ -15,7 +15,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+/lib/
 lib64/
 parts/
 sdist/
@@ -217,3 +217,16 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+ 
+ # SvelteKit / Node
+ .svelte-kit/
+ node_modules/
+
+# Build artifacts (nested)
+**/node_modules/
+**/.svelte-kit/
+**/build/
+**/dist/
+
+# Agent Zero project metadata
+.a0proj/

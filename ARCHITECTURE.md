@@ -641,6 +641,116 @@ payload size or parse time ever matters, but the payloads are small and JSON is
 easier to inspect while the protocol is still moving.
 
 ### Worker Core In Rust (Speculative)
+ 
+ ## Web Delivery Tier
+ 
+ The web delivery tier makes imgcache derivatives consumable from browsers
+ without weakening the core invariants. It adds a second, public data plane
+ alongside the existing ZMQ control plane — image bytes never traverse ZMQ.
+ 
+ ### Two-Plane Design
+ 
+ ```text
+ CONTROL PLANE (small JSON messages, trusted network)
+   SvelteKit server (Node) ──zeromq.js REQ/REP──▶ imgcache ZMQ worker
+       sends: spec payload (JSON)            returns: relpath (cache hit guaranteed after)
+ 
+ DATA PLANE (image bytes, public)
+   Browser ──HTTPS (h3 via Alt-Svc)──▶ Caddy ──sendfile──▶ shared volume (read-only)
+       URL: /cache/leaves/<xx>/<key>.<ext>?exp=...&sig=...
+ ```
+ 
+ The control plane carries only specs, keys, and relative paths — never image
+ bytes. The data plane serves cache files directly from a read-only volume
+ mount; Caddy never triggers renders and has no write access to the cache.
+ 
+ ### Design Rules (Invariants)
+ 
+ These rules are invariants that contributors must not break:
+ 
+ 1. **Worker is the only writer under `cache/`.** Caddy mounts the shared
+    volume **read-only**. No public-facing component ever writes cache files.
+ 2. **Key derivation exists only in Python.** The TypeScript client never
+    hashes, never canonicalizes params, never builds paths. It sends specs and
+    receives relpaths from the worker.
+ 3. **Only `cache/leaves/` (signed URLs) and `cache/pinned/` (explicitly
+    published, public) are web-exposed.** `raw/` and `cache/nodes/` are never
+    served. Caddy returns 404 for everything outside these two prefixes.
+ 4. **Browsers can only fetch URLs already resolved by the SvelteKit server.**
+    Caddy never triggers renders — there is no render-amplification surface on
+    the public plane.
+ 5. **Image URLs are minted in exactly one place (SvelteKit server) and
+    HMAC-signed there.** The signing secret stays in the one process that mints
+    URLs; it never reaches the browser or Caddy directly.
+ 
+ ### URL Signing
+ 
+ Signed leaf URLs use a query-string format so the file path is untouched and
+ Caddy file matching still works:
+ 
+ ```text
+ /cache/leaves/e7/<key>.webp?exp=<unix_ts>&sig=<hex hmac-sha256(secret, path + "\n" + exp)>
+ ```
+ 
+ The signature covers path + expiry only, so future query params do not
+ invalidate existing URLs. Default signed TTL is 1 hour. Expired links return
+ 403 (browser cache still serves already-fetched images within the immutable
+ window — acceptable and intended).
+ 
+ Caddy delegates verification to the SvelteKit app via `forward_auth`:
+ the `/api/imgcache/verify` route checks `sig` and `exp` from the
+ `X-Forwarded-Uri` header using constant-time comparison
+ (`crypto.timingSafeEqual`) and returns 204 or 403.
+ 
+ Key rotation is supported via `IMGCACHE_URL_SIGNING_SECRET_PREVIOUS`, accepted
+ during overlap windows.
+ 
+ ### Pinned Public Tier
+ 
+ `publishUrl(spec)` materializes with `MaterializePolicy.PIN` — the leaf lands
+ in `cache/pinned/` and is excluded from TTL eviction (required, since default
+ eviction TTL is 7 days). The returned URL is unsigned and served under
+ `/cache/pinned/...`. Both tiers share the same
+ `Cache-Control: public, max-age=31536000, immutable` header because URLs are
+ content-addressed and never change meaning.
+ 
+ Publishing is an explicit server-side act; unpublish = unpin + stop emitting
+ the URL (already-fetched copies may persist in browser caches until evicted
+ there).
+ 
+ ### TypeScript Client Fit
+ 
+ The `@imgcache/client` package (`clients/typescript/`) is a server-side-only
+ library. It mirrors the Python spec builder as an immutable chain: each
+ operation returns a new `ImageSpec` instance. `resolve()` sends a ZMQ
+ `materialize` request and returns the worker's relpath. `identify()` sends an
+ `identify` request for metadata. The client never hashes keys or builds paths
+ — it receives relpaths from the worker.
+ 
+ The package must never be bundled for the browser. It uses native `zeromq`
+ sockets (REQ/REP), which require long-lived connections; serverless/edge
+ adapters are unsupported.
+ 
+ In the SvelteKit app, a `$lib/server/imgcache.ts` singleton holds the `ImgCache`
+ instance. An `imageUrl(spec)` helper resolves and signs in one call, returning
+ a full URL for `<img src>`. See `examples/sveltekit/` for a reference
+ integration.
+ 
+ ### Eviction vs. sendfile Safety
+ 
+ TTL eviction may remove a leaf file after the SvelteKit server has resolved it
+ but before or during a browser's `sendfile` response. POSIX `unlink`
+ semantics make this safe: `unlink` removes the directory entry, but a file
+ already opened by Caddy's `sendfile` continues to read valid data until the
+ file descriptor is closed. The inode is reclaimed only after the last
+ descriptor closes. Therefore eviction never causes a truncated or failed
+ in-flight response.
+ 
+ A signed URL can 404 if TTL eviction removed the leaf after resolve. The
+ SvelteKit server resolves per page render, so the window is one page lifetime
+ — acceptable. If it becomes an issue, lower page cache times or have the
+ image `onerror` handler re-request the page data. Caddy must never trigger
+ renders.
 
 libvips performs the heavy pixel work in C, so Rust would not make transforms
 meaningfully faster by itself. The candidate benefits are state management,

@@ -1,0 +1,17 @@
+# Build artifacts
+**/node_modules/
+**/dist/
+**/.svelte-kit/
+**/build/
+
+# Python
+venv/
+.venv/
+**/__pycache__/
+*.pyc
+
+# Misc
+.git/
+.a0proj/
+.pytest_cache/
+shared/

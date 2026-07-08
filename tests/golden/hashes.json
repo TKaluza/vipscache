@@ -1,0 +1,22 @@
+{
+  "binary_0_255": {
+    "description": "binary 0 255",
+    "length": 256,
+    "xxh3_128_hex": "f1f8a93f50849ac39408a4433b952d71"
+  },
+  "empty": {
+    "description": "empty",
+    "length": 0,
+    "xxh3_128_hex": "99aa06d3014798d86001c324468d497f"
+  },
+  "multi_mb_pattern": {
+    "description": "multi mb pattern",
+    "length": 3145728,
+    "xxh3_128_hex": "1bc0b696cf9328de3e8769d4b0891ee6"
+  },
+  "short_ascii": {
+    "description": "short ascii",
+    "length": 8,
+    "xxh3_128_hex": "464bbf9ed4d7cd5101cec1235380b4d2"
+  }
+}
