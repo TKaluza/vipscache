@@ -1,0 +1,32 @@
+{
+  "name": "@docmist/imgcache",
+  "version": "0.3.0",
+  "description": "Server-side shared-storage ZeroMQ client for imgcache",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "hash-wasm": "^4.12.0",
+    "zeromq": "^6.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "typescript": "^6.0.3"
+  }
+}

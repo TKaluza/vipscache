@@ -21,7 +21,7 @@ def download(url: str, path: Path) -> Path:
 def test_real_pdf_page_renders_to_png(tmp_path):
     root = tmp_path / "shared"
     pdf = download(PDF_URL, tmp_path / "sample-local-pdf.pdf")
-    source = ImgCacheClient(root).open(pdf, mime="application/pdf").source
+    source = ImgCacheClient(root).register(pdf, mime="application/pdf").source
     spec = ImageSpec.canonical(
         source,
         [Operation("render", {"page": 1, "dpi": 75, "colorspace": "srgb"}, MaterializePolicy.FORCE)],
@@ -50,7 +50,7 @@ def test_real_pdf_identify_matches_rendered_leaf(tmp_path):
     worker = RenderWorker(CacheLayout(root / "cache"))
     client = ImgCacheClient(root, worker)
 
-    page = client.open(pdf, mime="application/pdf").page(1, dpi=75)
+    page = client.register(pdf, mime="application/pdf").page(1, dpi=75)
     reported = page.size
     assert page.n_pages >= 1
 
@@ -62,7 +62,7 @@ def test_real_pdf_identify_matches_rendered_leaf(tmp_path):
 def test_real_commons_image_derivative_to_webp(tmp_path):
     root = tmp_path / "shared"
     jpg = download(IMAGE_URL, tmp_path / "commons-example.jpg")
-    source = ImgCacheClient(root).open(jpg, mime="image/jpeg").source
+    source = ImgCacheClient(root).register(jpg, mime="image/jpeg").source
     spec = ImageSpec.canonical(
         source,
         [

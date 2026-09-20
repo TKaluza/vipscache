@@ -118,8 +118,8 @@ layout = CacheLayout(root / "cache")
 
 
 ingest_client = ImgCacheClient(root)
-image_source = ingest_client.open(image_path, mime="image/jpeg").source
-pdf_source = ingest_client.open(pdf_path, mime="application/pdf").source
+image_source = ingest_client.register(image_path, mime="image/jpeg").source
+pdf_source = ingest_client.register(pdf_path, mime="application/pdf").source
 
 
 deadline = time.monotonic() + 60

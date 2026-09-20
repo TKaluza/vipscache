@@ -78,9 +78,9 @@ while time.time() < deadline:
             if not worker.healthcheck():
                 raise RuntimeError("worker healthcheck failed")
             client = ImgCacheClient(root, worker)
-            image = client.open(host_source, mime="image/x-portable-pixmap")
+            image = client.register(host_source, mime="image/x-portable-pixmap")
             image_path = image.scale(width=32).png().path()
-            pdf_path = client.open(host_pdf, mime="application/pdf").page(1, dpi=75).png().path()
+            pdf_path = client.register(host_pdf, mime="application/pdf").page(1, dpi=75).png().path()
             stats = worker.stats(key=image.source.file_id)
             if not stats["children"]:
                 raise RuntimeError("worker stats did not record image DAG edges")
