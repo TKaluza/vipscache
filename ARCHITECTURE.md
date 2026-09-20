@@ -267,7 +267,7 @@ The client uses REQ semantics with a client-side retry pattern:
 - Sockets are not shared across threads. A long-lived `ImgCacheClient` may be shared, but its sync ZMQ sockets are lazy per thread or per session.
 - Sockets use `LINGER=0` so shutdown does not hang on unsent messages.
 - Default timeout is intentionally long because image/PDF work can be CPU-heavy.
-- Async materialization uses an async ZMQ path; callers reach it through `await image`, `image.apath()`, `image.abytes()`, or `client.aget(spec)`.
+- Async materialization uses an async ZMQ path; callers reach it through `await image`, `image.apath()`, `image.aread_bytes()`, or `client.aget(spec)`.
 
 For local single-host use, prefer `ipc://<runtime-dir>/imgcache-worker.sock`. For Docker container-to-container use, prefer `tcp://worker:<port>` where `worker` is the Compose/service DNS name; do not use `localhost` unless client and worker are inside the same network namespace.
 
@@ -335,7 +335,7 @@ Originals can be stored flat by content hash:
 <root>/raw/<file_id>
 ```
 
-`ImgCacheClient.open(path)` computes `xxh3-128(content)`, copies the source file atomically into `raw/<file_id>` if needed, and returns a `CachedImage` whose `ImageSpec.source` references the original by `file_id`. `SourceSpec` does not carry an absolute original path. The worker resolves the original path from its own configured root.
+`ImgCacheClient.register(path)` computes `xxh3-128(content)`, copies the source file atomically into `raw/<file_id>` if needed, and returns a `CachedImage` whose `ImageSpec.source` references the original by `file_id`. `SourceSpec` does not carry an absolute original path. The worker resolves the original path from its own configured root.
 
 Clients may memoize file hashes in-process by `(resolved_path, st_mtime_ns,
 st_size)`. On a memo hit, ingest checks whether `raw/<file_id>` already exists

@@ -28,7 +28,7 @@ def test_worker_materializes_forced_node_and_leaf(tmp_path):
     source_path = tmp_path / "source.ppm"
     make_image(source_path)
 
-    source = ImgCacheClient(root).open(source_path, mime="image/png").source
+    source = ImgCacheClient(root).register(source_path, mime="image/png").source
     render = Operation("render", {"width": 32}, MaterializePolicy.FORCE)
     crop = Operation("crop", {"x": 4, "y": 4, "w": 16, "h": 12}, MaterializePolicy.NEVER)
     spec = ImageSpec.build(source, [render, crop], Operation("encode", {"format": "png"}))
@@ -49,7 +49,7 @@ def test_worker_reuses_deepest_materialized_parent(tmp_path):
     root = tmp_path / "shared"
     source_path = tmp_path / "source.ppm"
     make_image(source_path)
-    source = ImgCacheClient(root).open(source_path, mime="image/png").source
+    source = ImgCacheClient(root).register(source_path, mime="image/png").source
     render = Operation("render", {"width": 32}, MaterializePolicy.FORCE)
     crop = Operation("crop", {"x": 0, "y": 0, "w": 10, "h": 10}, MaterializePolicy.NEVER)
     webp = ImageSpec.build(source, [render, crop], Operation("encode", {"format": "webp", "quality": 80}))
@@ -74,13 +74,14 @@ def test_img_cache_client_original_fallback_and_materialized_derivative(tmp_path
     worker = RenderWorker(CacheLayout(root / "cache"))
     client = ImgCacheClient(root, worker)
 
-    image = client.open(source_path, mime="image/png")
+    image = client.register(source_path, mime="image/png")
     assert image.path() == root / "raw" / image.source.file_id
     assert image.path().exists()
 
     preview = image.scale(width=20).png()
     path = preview.path()
     assert path.exists()
+    assert preview.read_bytes() == path.read_bytes()
 
     with preview.open() as handle:
         assert handle.read(8).startswith(b"\x89PNG")
@@ -90,7 +91,7 @@ def test_cached_image_rejects_transform_without_encode(tmp_path):
     source_path = tmp_path / "source.ppm"
     make_image(source_path)
     client = ImgCacheClient(tmp_path / "shared")
-    image = client.open(source_path, mime="image/png").scale(width=20)
+    image = client.register(source_path, mime="image/png").scale(width=20)
 
     try:
         image.path()
@@ -108,10 +109,13 @@ def test_async_cached_image_api(tmp_path):
     client = ImgCacheClient(root, worker)
 
     async def run():
-        image = await client.aopen(source_path, mime="image/png")
+        image = await client.aregister(source_path, mime="image/png")
         preview = image.scale(width=20).png()
+        with await preview.aopen() as handle:
+            assert handle.read(8).startswith(b"\x89PNG")
+        assert handle.closed
         path = await preview
-        data = await preview.abytes()
+        data = await preview.aread_bytes()
         return path, data
 
     path, data = asyncio.run(run())
@@ -139,7 +143,7 @@ def test_worker_duplicate_render_raises_busy_and_cleans_locks(tmp_path):
     root = tmp_path / "shared"
     source_path = tmp_path / "source.ppm"
     make_image(source_path)
-    source = ImgCacheClient(root).open(source_path, mime="image/png").source
+    source = ImgCacheClient(root).register(source_path, mime="image/png").source
     spec = ImageSpec.build(
         source,
         [Operation("scale", {"width": 16})],
@@ -172,7 +176,7 @@ def test_worker_busy_loser_returns_hit_when_render_finishes_in_time(tmp_path):
     root = tmp_path / "shared"
     source_path = tmp_path / "source.ppm"
     make_image(source_path)
-    source = ImgCacheClient(root).open(source_path, mime="image/png").source
+    source = ImgCacheClient(root).register(source_path, mime="image/png").source
     spec = ImageSpec.build(
         source,
         [Operation("scale", {"width": 16})],
@@ -202,7 +206,7 @@ def test_worker_enforces_limits(tmp_path):
     root = tmp_path / "shared"
     source_path = tmp_path / "source.ppm"
     make_image(source_path)
-    source = ImgCacheClient(root).open(source_path, mime="image/png").source
+    source = ImgCacheClient(root).register(source_path, mime="image/png").source
     spec = ImageSpec.build(
         source,
         [Operation("render", {"width": 20})],

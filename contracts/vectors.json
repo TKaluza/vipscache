@@ -1,0 +1,424 @@
+{
+  "files": [
+    {
+      "name": "empty",
+      "hex": "",
+      "repeat": 1,
+      "hash": "99aa06d3014798d86001c324468d497f"
+    },
+    {
+      "name": "text",
+      "hex": "4772c3bcc39f6520f09f8c8d0a",
+      "repeat": 1,
+      "hash": "c87846b2eaca44d57cdbda08e1a043b6"
+    },
+    {
+      "name": "binary",
+      "hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+      "repeat": 1,
+      "hash": "f1f8a93f50849ac39408a4433b952d71"
+    },
+    {
+      "name": "stream",
+      "hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+      "repeat": 8193,
+      "hash": "375efb95e134def970a8d0c2b0df158d"
+    }
+  ],
+  "canonical": [
+    {
+      "input": {
+        "1": 1.0,
+        "zero": -0.0,
+        "a": 1e-07,
+        "b": 1e-05,
+        "c": 0.0001,
+        "d": 1.2345678901234567,
+        "e": 1.2e-100
+      },
+      "json": "{\"1\":1,\"a\":1e-07,\"b\":1e-05,\"c\":0.0001,\"d\":1.2345678901234567,\"e\":1.2e-100,\"zero\":0}",
+      "hash": "464518150a196f7e6d8da82a3c6b9fba"
+    },
+    {
+      "input": {
+        "𐀀": "🌍",
+        "": "é",
+        "10": false,
+        "2": "\n\t\u0000"
+      },
+      "json": "{\"10\":false,\"2\":\"\\n\\t\\u0000\",\"\":\"é\",\"𐀀\":\"🌍\"}",
+      "hash": "43e35664c20ab2d39b67d97b5dc0157b"
+    }
+  ],
+  "specs": [
+    {
+      "name": "original",
+      "input": {
+        "source": {
+          "file_id": "c87846b2eaca44d57cdbda08e1a043b6",
+          "mime": "application/pdf",
+          "metadata": {
+            "filename": "Grüße.pdf"
+          }
+        }
+      },
+      "payload": {
+        "encode": null,
+        "operations": [],
+        "source": {
+          "file_id": "c87846b2eaca44d57cdbda08e1a043b6",
+          "metadata": {
+            "filename": "Grüße.pdf"
+          },
+          "mime": "application/pdf"
+        }
+      },
+      "key": "c87846b2eaca44d57cdbda08e1a043b6",
+      "relpath": "raw/c87846b2eaca44d57cdbda08e1a043b6"
+    },
+    {
+      "name": "defaults",
+      "input": {
+        "source": {
+          "file_id": "c87846b2eaca44d57cdbda08e1a043b6",
+          "mime": "application/pdf",
+          "metadata": {
+            "filename": "Grüße.pdf"
+          }
+        },
+        "encode": {
+          "format": "PNG"
+        }
+      },
+      "payload": {
+        "encode": {
+          "engine_version": "imgcache-v1",
+          "format": "png",
+          "params": {}
+        },
+        "operations": [],
+        "source": {
+          "file_id": "c87846b2eaca44d57cdbda08e1a043b6",
+          "metadata": {
+            "filename": "Grüße.pdf"
+          },
+          "mime": "application/pdf"
+        }
+      },
+      "key": "4e5aed32651a15b275d862a6b89878ce",
+      "relpath": "cache/leaves/4e/4e5aed32651a15b275d862a6b89878ce.png"
+    },
+    {
+      "name": "pdf",
+      "input": {
+        "source": {
+          "file_id": "c87846b2eaca44d57cdbda08e1a043b6",
+          "mime": "application/pdf",
+          "metadata": {
+            "filename": "Grüße.pdf"
+          }
+        },
+        "operations": [
+          {
+            "name": "render",
+            "params": {
+              "page": 1,
+              "dpi": 75
+            }
+          },
+          {
+            "name": "crop_fraction",
+            "params": {
+              "left": 0.0,
+              "top": 0.25,
+              "right": 1.0,
+              "bottom": 0.75
+            }
+          },
+          {
+            "name": "resize",
+            "params": {
+              "width": 320
+            }
+          }
+        ],
+        "encode": {
+          "format": "webp",
+          "params": {
+            "quality": 82
+          }
+        }
+      },
+      "payload": {
+        "encode": {
+          "engine_version": "imgcache-v1",
+          "format": "webp",
+          "params": {
+            "quality": 82
+          }
+        },
+        "operations": [
+          {
+            "materialize": "never",
+            "name": "render",
+            "params": {
+              "dpi": 75,
+              "page": 1
+            }
+          },
+          {
+            "materialize": "never",
+            "name": "crop_fraction",
+            "params": {
+              "bottom": 0.75,
+              "left": 0.0,
+              "right": 1.0,
+              "top": 0.25
+            }
+          },
+          {
+            "materialize": "never",
+            "name": "resize",
+            "params": {
+              "width": 320
+            }
+          }
+        ],
+        "source": {
+          "file_id": "c87846b2eaca44d57cdbda08e1a043b6",
+          "metadata": {
+            "filename": "Grüße.pdf"
+          },
+          "mime": "application/pdf"
+        }
+      },
+      "key": "5269e123d6b95d190e525195b9132663",
+      "relpath": "cache/leaves/52/5269e123d6b95d190e525195b9132663.webp"
+    },
+    {
+      "name": "unicode-floats",
+      "input": {
+        "source": {
+          "file_id": "c87846b2eaca44d57cdbda08e1a043b6",
+          "mime": "application/pdf",
+          "metadata": {
+            "filename": "Grüße.pdf"
+          }
+        },
+        "operations": [
+          {
+            "name": "rotate",
+            "params": {
+              "degrees": -12.5,
+              "small": 1e-07,
+              "other": 1e-05,
+              "negative_zero": -0.0,
+              "𐀀": "🌍",
+              "": "é",
+              "nested": {
+                "10": true,
+                "2": [
+                  null,
+                  1.0
+                ]
+              }
+            }
+          }
+        ],
+        "encode": {
+          "format": "JPEG",
+          "engine_version": "imgcache-test",
+          "params": {
+            "quality": 85
+          }
+        }
+      },
+      "payload": {
+        "encode": {
+          "engine_version": "imgcache-test",
+          "format": "jpeg",
+          "params": {
+            "quality": 85
+          }
+        },
+        "operations": [
+          {
+            "materialize": "never",
+            "name": "rotate",
+            "params": {
+              "degrees": -12.5,
+              "negative_zero": -0.0,
+              "nested": {
+                "10": true,
+                "2": [
+                  null,
+                  1.0
+                ]
+              },
+              "other": 1e-05,
+              "small": 1e-07,
+              "": "é",
+              "𐀀": "🌍"
+            }
+          }
+        ],
+        "source": {
+          "file_id": "c87846b2eaca44d57cdbda08e1a043b6",
+          "metadata": {
+            "filename": "Grüße.pdf"
+          },
+          "mime": "application/pdf"
+        }
+      },
+      "key": "0702030a62dc2b8faa41402995142724",
+      "relpath": "cache/leaves/07/0702030a62dc2b8faa41402995142724.jpg"
+    },
+    {
+      "name": "never",
+      "input": {
+        "source": {
+          "file_id": "c87846b2eaca44d57cdbda08e1a043b6",
+          "mime": "application/pdf",
+          "metadata": {
+            "filename": "Grüße.pdf"
+          }
+        },
+        "operations": [
+          {
+            "name": "render",
+            "params": {
+              "page": 1
+            },
+            "materialize": "never"
+          }
+        ],
+        "encode": {
+          "format": "png"
+        }
+      },
+      "payload": {
+        "encode": {
+          "engine_version": "imgcache-v1",
+          "format": "png",
+          "params": {}
+        },
+        "operations": [
+          {
+            "materialize": "never",
+            "name": "render",
+            "params": {
+              "page": 1
+            }
+          }
+        ],
+        "source": {
+          "file_id": "c87846b2eaca44d57cdbda08e1a043b6",
+          "metadata": {
+            "filename": "Grüße.pdf"
+          },
+          "mime": "application/pdf"
+        }
+      },
+      "key": "80db77282f9358f348cd9649570c7fd3",
+      "relpath": "cache/leaves/80/80db77282f9358f348cd9649570c7fd3.png"
+    },
+    {
+      "name": "force",
+      "input": {
+        "source": {
+          "file_id": "c87846b2eaca44d57cdbda08e1a043b6",
+          "mime": "application/pdf",
+          "metadata": {
+            "filename": "Grüße.pdf"
+          }
+        },
+        "operations": [
+          {
+            "name": "render",
+            "params": {
+              "page": 1
+            },
+            "materialize": "force"
+          }
+        ],
+        "encode": {
+          "format": "png"
+        }
+      },
+      "payload": {
+        "encode": {
+          "engine_version": "imgcache-v1",
+          "format": "png",
+          "params": {}
+        },
+        "operations": [
+          {
+            "materialize": "force",
+            "name": "render",
+            "params": {
+              "page": 1
+            }
+          }
+        ],
+        "source": {
+          "file_id": "c87846b2eaca44d57cdbda08e1a043b6",
+          "metadata": {
+            "filename": "Grüße.pdf"
+          },
+          "mime": "application/pdf"
+        }
+      },
+      "key": "80db77282f9358f348cd9649570c7fd3",
+      "relpath": "cache/leaves/80/80db77282f9358f348cd9649570c7fd3.png"
+    },
+    {
+      "name": "pin",
+      "input": {
+        "source": {
+          "file_id": "c87846b2eaca44d57cdbda08e1a043b6",
+          "mime": "application/pdf",
+          "metadata": {
+            "filename": "Grüße.pdf"
+          }
+        },
+        "operations": [
+          {
+            "name": "render",
+            "params": {
+              "page": 1
+            },
+            "materialize": "pin"
+          }
+        ],
+        "encode": {
+          "format": "png"
+        }
+      },
+      "payload": {
+        "encode": {
+          "engine_version": "imgcache-v1",
+          "format": "png",
+          "params": {}
+        },
+        "operations": [
+          {
+            "materialize": "pin",
+            "name": "render",
+            "params": {
+              "page": 1
+            }
+          }
+        ],
+        "source": {
+          "file_id": "c87846b2eaca44d57cdbda08e1a043b6",
+          "metadata": {
+            "filename": "Grüße.pdf"
+          },
+          "mime": "application/pdf"
+        }
+      },
+      "key": "80db77282f9358f348cd9649570c7fd3",
+      "relpath": "cache/leaves/80/80db77282f9358f348cd9649570c7fd3.png"
+    }
+  ]
+}

@@ -29,7 +29,7 @@ def make_client(tmp_path: Path) -> tuple[ImgCacheClient, Path]:
 
 def test_identify_reports_original_geometry(tmp_path):
     client, source_path = make_client(tmp_path)
-    image = client.open(source_path, mime="image/x-portable-pixmap")
+    image = client.register(source_path, mime="image/x-portable-pixmap")
 
     assert image.size == (64, 48)
     assert image.width == 64
@@ -41,7 +41,7 @@ def test_identify_reports_original_geometry(tmp_path):
 
 def test_metadata_adapts_to_pipeline_and_resets_per_image(tmp_path):
     client, source_path = make_client(tmp_path)
-    image = client.open(source_path, mime="image/x-portable-pixmap")
+    image = client.register(source_path, mime="image/x-portable-pixmap")
 
     # Cache metadata on the original, then derive a new image.
     assert image.size == (64, 48)
@@ -55,14 +55,14 @@ def test_metadata_adapts_to_pipeline_and_resets_per_image(tmp_path):
 
 def test_fast_rotate_swaps_axes_via_libvips(tmp_path):
     client, source_path = make_client(tmp_path)
-    image = client.open(source_path, mime="image/x-portable-pixmap")
+    image = client.register(source_path, mime="image/x-portable-pixmap")
 
     assert image.fast_rotate(90).size == (48, 64)
 
 
 def test_normalize_to_gray_reports_l_mode(tmp_path):
     client, source_path = make_client(tmp_path)
-    image = client.open(source_path, mime="image/x-portable-pixmap")
+    image = client.register(source_path, mime="image/x-portable-pixmap")
 
     gray = image.normalize(colorspace="gray")
     assert gray.mode == "L"
@@ -71,7 +71,7 @@ def test_normalize_to_gray_reports_l_mode(tmp_path):
 
 def test_crop_fraction_resolves_against_libvips_size(tmp_path):
     client, source_path = make_client(tmp_path)
-    image = client.open(source_path, mime="image/x-portable-pixmap")
+    image = client.register(source_path, mime="image/x-portable-pixmap")
 
     top_half = image.crop_fraction(bottom=0.5)
     assert top_half.size == (64, 24)
@@ -82,7 +82,7 @@ def test_crop_fraction_resolves_against_libvips_size(tmp_path):
 
 def test_crop_fraction_rejects_out_of_range(tmp_path):
     client, source_path = make_client(tmp_path)
-    image = client.open(source_path, mime="image/x-portable-pixmap")
+    image = client.register(source_path, mime="image/x-portable-pixmap")
 
     with pytest.raises(ValueError, match=r"crop_fraction .* within \[0.0, 1.0\]"):
         image.crop_fraction(bottom=1.5).size
@@ -90,7 +90,7 @@ def test_crop_fraction_rejects_out_of_range(tmp_path):
 
 def test_pixel_crop_out_of_bounds_gives_clear_error(tmp_path):
     client, source_path = make_client(tmp_path)
-    image = client.open(source_path, mime="image/x-portable-pixmap")
+    image = client.register(source_path, mime="image/x-portable-pixmap")
 
     with pytest.raises(ValueError, match=r"outside image bounds \(64x48\)"):
         image.crop(x=0, y=0, w=100, h=100).png().path()
@@ -110,16 +110,17 @@ def test_metadata_requires_a_worker(tmp_path):
     make_image(source_path)
     client = ImgCacheClient(root)  # no worker
 
-    image = client.open(source_path, mime="image/x-portable-pixmap")
+    image = client.register(source_path, mime="image/x-portable-pixmap")
     with pytest.raises(RuntimeError, match="metadata requires a worker"):
         image.size
 
 
 def test_async_info(tmp_path):
     client, source_path = make_client(tmp_path)
-    image = client.open(source_path, mime="image/x-portable-pixmap").scale(width=20)
+    image = client.register(source_path, mime="image/x-portable-pixmap").scale(width=20)
 
-    info = asyncio.run(image.ainfo())
+    info = asyncio.run(image.aidentify())
+    assert asyncio.run(image.ainfo()) == info
     assert info["width"] == 20
     assert info["height"] == 15
 

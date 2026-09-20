@@ -34,7 +34,7 @@ def test_img_cache_client_materializes_miss_over_zmq(tmp_path):
 
     with ZmqWorkerClient(endpoint) as worker_client:
         client = ImgCacheClient(root, worker_client)
-        image = client.open(source_path, mime="image/x-portable-pixmap")
+        image = client.register(source_path, mime="image/x-portable-pixmap")
         preview = image.scale(width=16).png()
         path = preview.path()
         worker_client.shutdown_worker()
@@ -57,7 +57,7 @@ def test_img_cache_client_identify_over_zmq(tmp_path):
 
     with ZmqWorkerClient(endpoint) as worker_client:
         client = ImgCacheClient(root, worker_client)
-        image = client.open(source_path, mime="image/x-portable-pixmap").scale(width=16)
+        image = client.register(source_path, mime="image/x-portable-pixmap").scale(width=16)
         meta = image.identify()
         size = image.size
         worker_client.shutdown_worker()
@@ -95,7 +95,7 @@ def test_zmq_worker_stats(tmp_path):
 
     with ZmqWorkerClient(endpoint) as worker_client:
         client = ImgCacheClient(root, worker_client)
-        source = client.open(source_path, mime="image/x-portable-pixmap").source
+        source = client.register(source_path, mime="image/x-portable-pixmap").source
         spec = ImageSpec.build(
             source,
             [Operation("scale", {"width": 16}, MaterializePolicy.FORCE)],
@@ -150,7 +150,7 @@ def test_zmq_busy_duplicate_requests_resolve_transparently(tmp_path):
     root = tmp_path / "shared"
     endpoint = f"ipc://{tmp_path / 'busy.sock'}"
 
-    source = ImgCacheClient(root).open(source_path, mime="image/x-portable-pixmap").source
+    source = ImgCacheClient(root).register(source_path, mime="image/x-portable-pixmap").source
     spec = ImageSpec.build(
         source,
         [Operation("scale", {"width": 16})],

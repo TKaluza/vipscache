@@ -1,0 +1,10 @@
+FROM node:24-bookworm-slim
+WORKDIR /app/clients/node
+COPY clients/node/package.json clients/node/package-lock.json ./
+RUN npm ci
+COPY clients/node/tsconfig.json ./
+COPY clients/node/src ./src
+COPY clients/node/test ./test
+COPY contracts /app/contracts
+RUN npm test
+CMD ["node", "test/integration.mjs"]

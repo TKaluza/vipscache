@@ -9,7 +9,7 @@ client = ImgCacheClient.zmq(
 )
 
 preview = (
-    client.open(Path("/home/tim/Downloads/Invoice-6017BED0-0038.pdf"), mime="application/pdf")
+    client.register(Path("/home/tim/Downloads/Invoice-6017BED0-0038.pdf"), mime="application/pdf")
     .scale(longest_edge=200)
     .webp(quality=82)
 )

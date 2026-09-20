@@ -70,7 +70,7 @@ class ImgCacheClient:
             ),
         )
 
-    def open(
+    def register(
         self,
         path: str | Path,
         *,
@@ -82,6 +82,25 @@ class ImgCacheClient:
         source = self.raw.put(source_path, mime=mime, metadata=metadata, source_file_id=source_file_id)
         return CachedImage(self, source)
 
+    async def aregister(
+        self,
+        path: str | Path,
+        *,
+        mime: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> CachedImage:
+        return await asyncio.to_thread(self.register, path, mime=mime, metadata=metadata)
+
+    def open(
+        self,
+        path: str | Path,
+        *,
+        mime: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> CachedImage:
+        """Compatibility alias for register(); does not open a file handle."""
+        return self.register(path, mime=mime, metadata=metadata)
+
     async def aopen(
         self,
         path: str | Path,
@@ -89,9 +108,11 @@ class ImgCacheClient:
         mime: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> CachedImage:
-        return await asyncio.to_thread(self.open, path, mime=mime, metadata=metadata)
+        """Compatibility alias for aregister()."""
+        return await self.aregister(path, mime=mime, metadata=metadata)
 
-    def path_for(self, spec: ImageSpec) -> Path:
+    def resolve(self, spec: ImageSpec) -> Path:
+        """Calculate the local cache path without checking files or rendering."""
         if spec.is_original:
             return self.raw.path_for(spec.source.file_id)
         if spec.operations and spec.encode is None:
@@ -100,8 +121,16 @@ class ImgCacheClient:
             return self.raw.path_for(spec.source.file_id)
         return self.layout.leaf_path(spec.leaf.key, spec.leaf.extension)
 
+    async def aresolve(self, spec: ImageSpec) -> Path:
+        """Async counterpart of resolve(); performs no I/O."""
+        return self.resolve(spec)
+
+    def path_for(self, spec: ImageSpec) -> Path:
+        """Compatibility alias for resolve()."""
+        return self.resolve(spec)
+
     def get(self, spec: ImageSpec) -> Path:
-        path = self.path_for(spec)
+        path = self.resolve(spec)
         if spec.encode is None:
             if path.exists():
                 return path
@@ -117,7 +146,7 @@ class ImgCacheClient:
             return path
 
     async def aget(self, spec: ImageSpec) -> Path:
-        path = self.path_for(spec)
+        path = self.resolve(spec)
         if spec.encode is None:
             if path.exists():
                 return path
@@ -324,10 +353,14 @@ class CachedImage:
         """Force a metadata fetch and return the full libvips metadata dict."""
         return dict(self._meta())
 
-    async def ainfo(self) -> dict[str, Any]:
+    async def aidentify(self) -> dict[str, Any]:
         if self._meta_cache is None:
             object.__setattr__(self, "_meta_cache", await self.client.aidentify(self.spec))
         return dict(self._meta_cache)
+
+    async def ainfo(self) -> dict[str, Any]:
+        """Compatibility alias for aidentify()."""
+        return await self.aidentify()
 
     def _meta(self) -> dict[str, Any]:
         if self._meta_cache is None:
@@ -350,12 +383,25 @@ class CachedImage:
     def open(self, mode: str = "rb"):
         return open_cache_hit(self.path(), mode)
 
-    def bytes(self) -> bytes:
+    async def aopen(self, mode: str = "rb"):
+        """Materialize if needed and open a file; the caller must close it."""
+        path = await self.apath()
+        return await asyncio.to_thread(open_cache_hit, path, mode)
+
+    def read_bytes(self) -> bytes:
         return self.path().read_bytes()
 
-    async def abytes(self) -> bytes:
+    async def aread_bytes(self) -> bytes:
         path = await self.apath()
         return await asyncio.to_thread(path.read_bytes)
+
+    def bytes(self) -> bytes:
+        """Compatibility alias for read_bytes()."""
+        return self.read_bytes()
+
+    async def abytes(self) -> bytes:
+        """Compatibility alias for aread_bytes()."""
+        return await self.aread_bytes()
 
     def __fspath__(self) -> str:
         return str(self.path())
