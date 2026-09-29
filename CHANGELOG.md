@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.2
+
+- Support and test Python 3.14 and 3.15.
+- Worker container image builds again (`README.md` and `LICENSE` are copied
+  into the build context for `uv_build`).
+- CI uses the Node 24 releases of `upload-artifact`, `download-artifact` and
+  `setup-uv`.
+
 ## 0.4.0
 
 Breaking: the project is renamed from `imgcache` to `vipscache`. There are no

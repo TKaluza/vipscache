@@ -10,7 +10,7 @@ npm ci
 npm test
 npm pack
 # Install the resulting tarball (also attached to each GitHub release):
-# npm install /path/to/tkaluza-vipscache-0.4.0.tgz
+# npm install /path/to/tkaluza-vipscache-0.4.2.tgz
 ```
 
 ```ts
