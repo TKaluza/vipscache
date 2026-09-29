@@ -1,6 +1,6 @@
 from pathlib import PurePosixPath
 
-from imgcache.layout import CacheLayout
+from vipscache.layout import CacheLayout
 
 
 def test_layout_shards_nodes_and_leaves(tmp_path):

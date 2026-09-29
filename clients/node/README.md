@@ -1,7 +1,7 @@
-# @docmist/imgcache
+# @tkaluza/vipscache
 
 Small server-side Node/TypeScript client using the existing Python ZeroMQ
-worker and a shared imgcache root. Includes TypeScript declarations. No HTTP
+worker and a shared vipscache root. Includes TypeScript declarations. No HTTP
 server, rendering engine, or Python-style fluent image builder.
 
 ```sh
@@ -9,17 +9,17 @@ cd clients/node
 npm ci
 npm test
 npm pack
-# In docmist-web, install the resulting tarball:
-# npm install /path/to/docmist-imgcache-0.3.0.tgz
+# Install the resulting tarball (also attached to each GitHub release):
+# npm install /path/to/tkaluza-vipscache-0.4.0.tgz
 ```
 
 ```ts
-import { ImgCacheClient } from '@docmist/imgcache';
+import { VipsCacheClient } from '@tkaluza/vipscache';
 
 // One instance per server process, closed during application shutdown.
-const images = new ImgCacheClient({
-  root: '/storage/imgcache',
-  endpoint: 'tcp://imgcache:5555',
+const images = new VipsCacheClient({
+  root: '/storage/vipscache',
+  endpoint: 'tcp://vipscache:5555',
   timeoutMs: 30_000,
   maxConcurrency: 4,
   maxQueue: 64,
@@ -60,38 +60,28 @@ subject to that deadline. `close()` rejects pending requests and closes sockets.
 
 Use only plain JSON values in specs. See the [shared contract](../../contracts/README.md)
 for number normalization, cache compatibility, and fixed test vectors.
-`ImgCacheError.type` distinguishes `Timeout`, `QueueFull`, `Closed`, protocol
+`VipsCacheError.type` distinguishes `Timeout`, `QueueFull`, `Closed`, protocol
 errors and worker error types. Filesystem errors retain Node's error codes.
 
-## API names in 0.3.0
+## API names
 
 All data methods return Promises: `register`, `identify`, `resolve`, `open`
 and `readBytes`. `close()` is synchronous. `register(path)` returns a source;
 `open(spec)` returns a file handle, rendering on a miss. `readBytes(spec)`
-returns a Buffer and closes the handle automatically. There is no `bytes`
-alias in this first Node release.
+returns a Buffer and closes the handle automatically.
 
 Python uses `register` / `aregister` and `read_bytes` / `aread_bytes` with its
-existing `CachedImage` builder. Legacy Python names remain compatible; see
-the [method mapping and migration notes](../../README.md#client-method-names-030).
+existing `CachedImage` builder; see the
+[method mapping](../../README.md#client-method-names).
 
-## docmist-web integration
+## Deployment notes
 
-The sibling repo uses npm, TypeScript and server code under `src/lib/server`.
-Keep this package in that server boundary. Its current Compose file provides
-PostgreSQL and a storage volume, but no Web runtime image; adapter-auto is not
-an explicit Node production deployment. This change supplies the client, not
-the Web deployment or authorized preview route.
-
-For a Node deployment, mount the same imgcache directory in Web and worker
-(the mount paths may differ), and keep ZeroMQ on the internal container network.
-Resolve the existing opaque preview `source_id` within the authorized job;
-never take source paths or arbitrary specs directly from a browser. Map the
-preview's one-based page and requested size to explicit operations as above.
-Do not introduce a separate preview-file tree. The cross-repository follow-up
-remains in [the synchronization checklist](../../../docmist-ai/todo_web.md).
-Raw-source lifetime/cleanup, deeper source validation and worker resource
-limits remain separate work.
+Use this package in server code only. Mount the same vipscache directory in the
+application and the worker (the mount paths may differ), and keep ZeroMQ on an
+internal container network. Resolve sources from your own authorized
+identifiers; never take source paths or arbitrary specs directly from a
+browser. Raw-source lifetime/cleanup, deeper source validation and worker
+resource limits are the application's responsibility.
 
 ## Validation
 

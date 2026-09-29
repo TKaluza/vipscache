@@ -5,8 +5,8 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from imgcache.hash import file_id
-from imgcache.spec import SourceSpec
+from vipscache.hash import file_id
+from vipscache.spec import SourceSpec
 
 
 class OriginalsStore:

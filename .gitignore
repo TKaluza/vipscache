@@ -220,3 +220,7 @@ __marimo__/
 
 # Node client
 node_modules/
+
+# Local working state
+docs/
+shared/

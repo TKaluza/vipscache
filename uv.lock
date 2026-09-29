@@ -78,54 +78,6 @@ wheels = [
 ]
 
 [[package]]
-name = "imgcache"
-version = "0.3.0"
-source = { editable = "." }
-dependencies = [
-    { name = "xxhash" },
-]
-
-[package.optional-dependencies]
-client = [
-    { name = "pyzmq" },
-]
-worker = [
-    { name = "lmdb" },
-    { name = "pydantic-settings" },
-    { name = "pyvips" },
-    { name = "pyzmq" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "lmdb" },
-    { name = "pydantic-settings" },
-    { name = "pytest" },
-    { name = "pyvips" },
-    { name = "pyzmq" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "lmdb", marker = "extra == 'worker'", specifier = ">=1.5.1" },
-    { name = "pydantic-settings", marker = "extra == 'worker'", specifier = ">=2.0.0" },
-    { name = "pyvips", marker = "extra == 'worker'", specifier = ">=3.0.0" },
-    { name = "pyzmq", marker = "extra == 'client'", specifier = ">=26.0.0" },
-    { name = "pyzmq", marker = "extra == 'worker'", specifier = ">=26.0.0" },
-    { name = "xxhash", specifier = ">=3.5.0" },
-]
-provides-extras = ["client", "worker"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "lmdb", specifier = ">=1.5.1" },
-    { name = "pydantic-settings", specifier = ">=2.0.0" },
-    { name = "pytest", specifier = ">=8.0.0" },
-    { name = "pyvips", specifier = ">=3.0.0" },
-    { name = "pyzmq", specifier = ">=26.0.0" },
-]
-
-[[package]]
 name = "iniconfig"
 version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -396,6 +348,54 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/55/e3/70399cb7dd41c10ac53367ae42139cf4b1ca5f36bb3dc6c9d33acdb43655/typing_inspection-0.4.2.tar.gz", hash = "sha256:ba561c48a67c5958007083d386c3295464928b01faa735ab8547c5692e87f464", size = 75949, upload-time = "2025-10-01T02:14:41.687Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/dc/9b/47798a6c91d8bdb567fe2698fe81e0c6b7cb7ef4d13da4114b41d239f65d/typing_inspection-0.4.2-py3-none-any.whl", hash = "sha256:4ed1cacbdc298c220f1bd249ed5287caa16f34d44ef4e9c3d0cbad5b521545e7", size = 14611, upload-time = "2025-10-01T02:14:40.154Z" },
+]
+
+[[package]]
+name = "vipscache"
+version = "0.4.0"
+source = { editable = "." }
+dependencies = [
+    { name = "xxhash" },
+]
+
+[package.optional-dependencies]
+client = [
+    { name = "pyzmq" },
+]
+worker = [
+    { name = "lmdb" },
+    { name = "pydantic-settings" },
+    { name = "pyvips" },
+    { name = "pyzmq" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "lmdb" },
+    { name = "pydantic-settings" },
+    { name = "pytest" },
+    { name = "pyvips" },
+    { name = "pyzmq" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "lmdb", marker = "extra == 'worker'", specifier = ">=1.5.1" },
+    { name = "pydantic-settings", marker = "extra == 'worker'", specifier = ">=2.0.0" },
+    { name = "pyvips", marker = "extra == 'worker'", specifier = ">=3.0.0" },
+    { name = "pyzmq", marker = "extra == 'client'", specifier = ">=26.0.0" },
+    { name = "pyzmq", marker = "extra == 'worker'", specifier = ">=26.0.0" },
+    { name = "xxhash", specifier = ">=3.5.0" },
+]
+provides-extras = ["client", "worker"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "lmdb", specifier = ">=1.5.1" },
+    { name = "pydantic-settings", specifier = ">=2.0.0" },
+    { name = "pytest", specifier = ">=8.0.0" },
+    { name = "pyvips", specifier = ">=3.0.0" },
+    { name = "pyzmq", specifier = ">=26.0.0" },
 ]
 
 [[package]]

@@ -5,9 +5,9 @@ from enum import StrEnum
 from functools import cached_property
 from typing import Any, Literal, Self
 
-from imgcache.hash import hash_canonical
+from vipscache.hash import hash_canonical
 
-ENGINE_VERSION = "imgcache-v1"
+ENGINE_VERSION = "vipscache-v1"
 
 
 class MaterializePolicy(StrEnum):

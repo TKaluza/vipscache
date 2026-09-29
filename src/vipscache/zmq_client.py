@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 from typing import Any, Self
 
-from imgcache.spec import ImageSpec
+from vipscache.spec import ImageSpec
 
 
 class ZmqWorkerClient:
@@ -21,7 +21,7 @@ class ZmqWorkerClient:
         try:
             import zmq
         except ImportError as error:
-            raise RuntimeError("ZmqWorkerClient requires pyzmq; install imgcache[client].") from error
+            raise RuntimeError("ZmqWorkerClient requires pyzmq; install vipscache[client].") from error
 
         self._zmq = zmq
         self._context = context or zmq.Context.instance()
@@ -171,7 +171,7 @@ class ZmqWorkerClient:
         try:
             import zmq.asyncio
         except ImportError as error:
-            raise RuntimeError("async ZMQ requests require pyzmq; install imgcache[client].") from error
+            raise RuntimeError("async ZMQ requests require pyzmq; install vipscache[client].") from error
 
         context = zmq.asyncio.Context.instance()
         attempts = self.request_retries + 1
@@ -219,7 +219,7 @@ def _busy_retry_after(response: dict[str, Any]) -> float | None:
 def main(argv: list[str] | None = None) -> int:
     import argparse
 
-    parser = argparse.ArgumentParser(description="Check an imgcache ZMQ worker.")
+    parser = argparse.ArgumentParser(description="Check an vipscache ZMQ worker.")
     parser.add_argument("--endpoint", default="tcp://127.0.0.1:5555")
     parser.add_argument("--timeout-ms", type=int, default=5_000)
     args = parser.parse_args(argv)

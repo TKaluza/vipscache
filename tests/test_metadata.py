@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from imgcache import CacheLayout, CachedImage, ImgCacheClient, RenderWorker
-from imgcache.spec import SourceSpec
-from imgcache.spec import ImageSpec, Operation
+from vipscache import CacheLayout, CachedImage, VipsCacheClient, RenderWorker
+from vipscache.spec import SourceSpec
+from vipscache.spec import ImageSpec, Operation
 
 
 def make_image(path: Path, width: int = 64, height: int = 48) -> None:
@@ -18,10 +18,10 @@ def make_image(path: Path, width: int = 64, height: int = 48) -> None:
     path.write_bytes(f"P6\n{width} {height}\n255\n".encode("ascii") + bytes(pixels))
 
 
-def make_client(tmp_path: Path) -> tuple[ImgCacheClient, Path]:
+def make_client(tmp_path: Path) -> tuple[VipsCacheClient, Path]:
     root = tmp_path / "shared"
     worker = RenderWorker(CacheLayout(root / "cache"))
-    client = ImgCacheClient(root, worker)
+    client = VipsCacheClient(root, worker)
     source_path = tmp_path / "source.ppm"
     make_image(source_path)
     return client, source_path
@@ -108,7 +108,7 @@ def test_metadata_requires_a_worker(tmp_path):
     root = tmp_path / "shared"
     source_path = tmp_path / "source.ppm"
     make_image(source_path)
-    client = ImgCacheClient(root)  # no worker
+    client = VipsCacheClient(root)  # no worker
 
     image = client.register(source_path, mime="image/x-portable-pixmap")
     with pytest.raises(RuntimeError, match="metadata requires a worker"):
@@ -120,7 +120,6 @@ def test_async_info(tmp_path):
     image = client.register(source_path, mime="image/x-portable-pixmap").scale(width=20)
 
     info = asyncio.run(image.aidentify())
-    assert asyncio.run(image.ainfo()) == info
     assert info["width"] == 20
     assert info["height"] == 15
 
@@ -136,7 +135,7 @@ class CountingIdentifyWorker:
 
 def test_client_metadata_memo_saves_duplicate_identify_roundtrip(tmp_path):
     worker = CountingIdentifyWorker()
-    client = ImgCacheClient(tmp_path / "shared", worker)
+    client = VipsCacheClient(tmp_path / "shared", worker)
     source = SourceSpec("f" * 32, mime="image/png")
     first = ImageSpec(source, (Operation("scale", {"width": 20}),))
     second = ImageSpec(source, (Operation("scale", {"width": 20}),))

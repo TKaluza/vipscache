@@ -1,9 +1,9 @@
 import json
 from pathlib import Path
 
-from imgcache.hash import canonical_json, file_id, xxh3_128_hexdigest
-from imgcache.layout import CacheLayout
-from imgcache.spec import ImageSpec
+from vipscache.hash import canonical_json, file_id, xxh3_128_hexdigest
+from vipscache.layout import CacheLayout
+from vipscache.spec import ImageSpec
 
 VECTORS = json.loads((Path(__file__).parents[1] / 'contracts/vectors.json').read_text())
 

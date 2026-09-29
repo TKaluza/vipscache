@@ -3,9 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from imgcache import CacheLayout, MaterializePolicy, Operation, RenderWorker, SourceSpec, WorkerState
-from imgcache.spec import ENGINE_VERSION, ImageSpec
-from imgcache.state import state_versions
+from vipscache import CacheLayout, MaterializePolicy, Operation, RenderWorker, SourceSpec, WorkerState
+from vipscache.spec import ENGINE_VERSION, ImageSpec
+from vipscache.state import state_versions
 
 
 @dataclass(frozen=True)

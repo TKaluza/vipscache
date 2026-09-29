@@ -7,11 +7,11 @@ from pathlib import Path
 from threading import Lock
 from typing import Any, Protocol, Self
 
-from imgcache.hash import file_id
-from imgcache.io import open_cache_hit
-from imgcache.layout import CacheLayout
-from imgcache.originals import OriginalsStore
-from imgcache.spec import EncodeSpec, ImageSpec, Operation, SourceSpec
+from vipscache.hash import file_id
+from vipscache.io import open_cache_hit
+from vipscache.layout import CacheLayout
+from vipscache.originals import OriginalsStore
+from vipscache.spec import EncodeSpec, ImageSpec, Operation, SourceSpec
 
 
 TRANSFORMED_WITHOUT_ENCODE = (
@@ -32,7 +32,7 @@ class AsyncWorkerClient(Protocol):
         ...
 
 
-class ImgCacheClient:
+class VipsCacheClient:
     def __init__(
         self,
         root: str | Path,
@@ -58,7 +58,7 @@ class ImgCacheClient:
         timeout_ms: int = 300_000,
         context: Any | None = None,
     ) -> Self:
-        from imgcache.zmq_client import ZmqWorkerClient
+        from vipscache.zmq_client import ZmqWorkerClient
 
         return cls(
             root,
@@ -91,26 +91,6 @@ class ImgCacheClient:
     ) -> CachedImage:
         return await asyncio.to_thread(self.register, path, mime=mime, metadata=metadata)
 
-    def open(
-        self,
-        path: str | Path,
-        *,
-        mime: str | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> CachedImage:
-        """Compatibility alias for register(); does not open a file handle."""
-        return self.register(path, mime=mime, metadata=metadata)
-
-    async def aopen(
-        self,
-        path: str | Path,
-        *,
-        mime: str | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> CachedImage:
-        """Compatibility alias for aregister()."""
-        return await self.aregister(path, mime=mime, metadata=metadata)
-
     def resolve(self, spec: ImageSpec) -> Path:
         """Calculate the local cache path without checking files or rendering."""
         if spec.is_original:
@@ -123,10 +103,6 @@ class ImgCacheClient:
 
     async def aresolve(self, spec: ImageSpec) -> Path:
         """Async counterpart of resolve(); performs no I/O."""
-        return self.resolve(spec)
-
-    def path_for(self, spec: ImageSpec) -> Path:
-        """Compatibility alias for resolve()."""
         return self.resolve(spec)
 
     def get(self, spec: ImageSpec) -> Path:
@@ -170,7 +146,7 @@ class ImgCacheClient:
             return cached
         worker = self.worker
         if worker is None:
-            raise RuntimeError("metadata requires a worker; create the client with ImgCacheClient.zmq(...)")
+            raise RuntimeError("metadata requires a worker; create the client with VipsCacheClient.zmq(...)")
         if hasattr(worker, "identify"):
             meta = worker.identify(spec)  # type: ignore[attr-defined]
         else:
@@ -184,7 +160,7 @@ class ImgCacheClient:
             return cached
         worker = self.worker
         if worker is None:
-            raise RuntimeError("metadata requires a worker; create the client with ImgCacheClient.zmq(...)")
+            raise RuntimeError("metadata requires a worker; create the client with VipsCacheClient.zmq(...)")
         if hasattr(worker, "aidentify"):
             meta = await worker.aidentify(spec)  # type: ignore[attr-defined]
         elif hasattr(worker, "identify"):
@@ -216,7 +192,7 @@ class ImgCacheClient:
 
 @dataclass(frozen=True)
 class CachedImage:
-    client: ImgCacheClient
+    client: VipsCacheClient
     source: SourceSpec
     operations: tuple[Operation, ...] = ()
     encode: EncodeSpec | None = None
@@ -358,10 +334,6 @@ class CachedImage:
             object.__setattr__(self, "_meta_cache", await self.client.aidentify(self.spec))
         return dict(self._meta_cache)
 
-    async def ainfo(self) -> dict[str, Any]:
-        """Compatibility alias for aidentify()."""
-        return await self.aidentify()
-
     def _meta(self) -> dict[str, Any]:
         if self._meta_cache is None:
             object.__setattr__(self, "_meta_cache", self.client.identify(self.spec))
@@ -394,14 +366,6 @@ class CachedImage:
     async def aread_bytes(self) -> bytes:
         path = await self.apath()
         return await asyncio.to_thread(path.read_bytes)
-
-    def bytes(self) -> bytes:
-        """Compatibility alias for read_bytes()."""
-        return self.read_bytes()
-
-    async def abytes(self) -> bytes:
-        """Compatibility alias for aread_bytes()."""
-        return await self.aread_bytes()
 
     def __fspath__(self) -> str:
         return str(self.path())

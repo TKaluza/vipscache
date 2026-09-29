@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE_NAME="${IMAGE_NAME:-imgcache-worker:local}"
-CONTAINER_NAME="${CONTAINER_NAME:-imgcache-worker-stress-$$}"
+IMAGE_NAME="${IMAGE_NAME:-vipscache-worker:local}"
+CONTAINER_NAME="${CONTAINER_NAME:-vipscache-worker-stress-$$}"
 HOST_PORT="${HOST_PORT:-15556}"
 MEMORY_LIMIT="${MEMORY_LIMIT:-512m}"
 MEMORY_SWAP="${MEMORY_SWAP:-$MEMORY_LIMIT}"
@@ -42,7 +42,7 @@ import sys
 
 
 def download(url: str, path: Path) -> None:
-    request = Request(url, headers={"User-Agent": "imgcache-memory-stress/0.1"})
+    request = Request(url, headers={"User-Agent": "vipscache-memory-stress/0.1"})
     with urlopen(request, timeout=60) as response:
         path.write_bytes(response.read())
 
@@ -68,9 +68,9 @@ podman run \
   --memory "$MEMORY_LIMIT" \
   --memory-swap "$MEMORY_SWAP" \
   --publish "127.0.0.1:${HOST_PORT}:5555" \
-  --env IMGCACHE_ENDPOINT=tcp://*:5555 \
-  --env IMGCACHE_MAX_WORKERS="$MAX_WORKERS" \
-  --env IMGCACHE_ROOT=/data \
+  --env VIPSCACHE_ENDPOINT=tcp://*:5555 \
+  --env VIPSCACHE_MAX_WORKERS="$MAX_WORKERS" \
+  --env VIPSCACHE_ROOT=/data \
   --volume "$RUN_DIR/shared:/data:Z" \
   "$IMAGE_NAME" >/dev/null
 
@@ -101,8 +101,8 @@ import sys
 import threading
 import time
 
-from imgcache import CacheLayout, ImageSpec, ImgCacheClient, MaterializePolicy, Operation
-from imgcache.zmq_client import ZmqWorkerClient
+from vipscache import CacheLayout, ImageSpec, VipsCacheClient, MaterializePolicy, Operation
+from vipscache.zmq_client import ZmqWorkerClient
 
 
 port = sys.argv[1]
@@ -117,7 +117,7 @@ endpoint = f"tcp://127.0.0.1:{port}"
 layout = CacheLayout(root / "cache")
 
 
-ingest_client = ImgCacheClient(root)
+ingest_client = VipsCacheClient(root)
 image_source = ingest_client.register(image_path, mime="image/jpeg").source
 pdf_source = ingest_client.register(pdf_path, mime="application/pdf").source
 
@@ -190,7 +190,7 @@ def remove_cached_outputs(spec: ImageSpec) -> None:
 def worker_loop() -> int:
     completed = 0
     with ZmqWorkerClient(endpoint, timeout_ms=120_000, request_retries=1) as worker_client:
-        client = ImgCacheClient(root, worker_client)
+        client = VipsCacheClient(root, worker_client)
         while time.monotonic() < stop_at:
             index = next_index()
             spec = pdf_spec(index) if index % 2 == 0 else image_spec(index)

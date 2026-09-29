@@ -8,12 +8,12 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from imgcache.hash import canonical_json
-from imgcache.spec import ImageSpec
+from vipscache.hash import canonical_json
+from vipscache.spec import ImageSpec
 
 STATE_SCHEMA_VERSION = "1"
 
-_LOGGER = logging.getLogger("imgcache.state")
+_LOGGER = logging.getLogger("vipscache.state")
 
 
 class WorkerState:
@@ -27,7 +27,7 @@ class WorkerState:
         try:
             import lmdb
         except ImportError as error:
-            raise RuntimeError("WorkerState requires lmdb; install imgcache[worker].") from error
+            raise RuntimeError("WorkerState requires lmdb; install vipscache[worker].") from error
 
         self._lmdb = lmdb
         self.state_dir = Path(state_dir)

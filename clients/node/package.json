@@ -1,7 +1,25 @@
 {
-  "name": "@docmist/imgcache",
-  "version": "0.3.0",
-  "description": "Server-side shared-storage ZeroMQ client for imgcache",
+  "name": "@tkaluza/vipscache",
+  "version": "0.4.0",
+  "description": "Server-side shared-storage ZeroMQ client for vipscache",
+  "keywords": [
+    "image",
+    "cache",
+    "libvips",
+    "zeromq",
+    "vipscache"
+  ],
+  "license": "MIT",
+  "author": "Tim Kaluza <tim@kaluza.space>",
+  "homepage": "https://github.com/TKaluza/vipscache/tree/main/clients/node#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TKaluza/vipscache.git",
+    "directory": "clients/node"
+  },
+  "bugs": {
+    "url": "https://github.com/TKaluza/vipscache/issues"
+  },
   "type": "module",
   "exports": {
     ".": {
@@ -11,7 +29,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=22"

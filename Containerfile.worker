@@ -23,6 +23,6 @@ RUN mkdir -p /data/raw /data/cache
 EXPOSE 5555
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD imgcache-zmq-healthcheck --endpoint tcp://127.0.0.1:5555
+    CMD vipscache-zmq-healthcheck --endpoint tcp://127.0.0.1:5555
 
-CMD ["imgcache-zmq-worker"]
+CMD ["vipscache-zmq-worker"]

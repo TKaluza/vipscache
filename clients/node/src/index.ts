@@ -29,14 +29,14 @@ export interface ClientOptions {
   maxConcurrency?: number;
   maxQueue?: number;
 }
-export class ImgCacheError extends Error {
+export class VipsCacheError extends Error {
   constructor(public readonly type: string, message: string) { super(message); this.name = type; }
 }
 interface Reply { ok: boolean; error?: { type: string; message: string }; retry_after?: number; [key: string]: unknown }
 interface Waiter { resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }
 
 /** Node-only client; authorize source paths and specs in your application before calling. */
-export class ImgCacheClient {
+export class VipsCacheClient {
   readonly root: string;
   private readonly options: Required<ClientOptions>;
   private active = 0;
@@ -89,7 +89,7 @@ export class ImgCacheClient {
     // Retry one eviction race after a successful render.
     for (let attempt = 0; ; attempt++) {
       const reply = await this.request({ method: 'materialize', spec: resolved.spec });
-      if (reply.relpath !== resolved.relpath) throw new ImgCacheError('ProtocolError', 'Worker returned a different cache path');
+      if (reply.relpath !== resolved.relpath) throw new VipsCacheError('ProtocolError', 'Worker returned a different cache path');
       try { return await open(path, 'r'); }
       catch (error) { if (attempt || (error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
     }
@@ -103,25 +103,25 @@ export class ImgCacheClient {
   close(): void {
     this.closed = true;
     this.stopping.abort();
-    for (const waiter of this.queue.splice(0)) { clearTimeout(waiter.timer); waiter.reject(new ImgCacheError('Closed', 'Client is closed')); }
+    for (const waiter of this.queue.splice(0)) { clearTimeout(waiter.timer); waiter.reject(new VipsCacheError('Closed', 'Client is closed')); }
     for (const socket of this.sockets) socket.close();
   }
 
   private localPath(relpath: string): string {
     if (!/^(raw\/[0-9a-f]{32}|cache\/leaves\/[0-9a-f]{2}\/[0-9a-f]{32}\.(webp|png|jpg|avif|tif|tiff))$/.test(relpath))
-      throw new ImgCacheError('ProtocolError', 'Invalid cache path');
+      throw new VipsCacheError('ProtocolError', 'Invalid cache path');
     return resolve(this.root, relpath);
   }
-  private assertOpen(): void { if (this.closed) throw new ImgCacheError('Closed', 'Client is closed'); }
+  private assertOpen(): void { if (this.closed) throw new VipsCacheError('Closed', 'Client is closed'); }
   private async acquire(deadline: number): Promise<void> {
     this.assertOpen();
     if (this.active < this.options.maxConcurrency) { this.active++; return; }
-    if (this.queue.length >= this.options.maxQueue) throw new ImgCacheError('QueueFull', 'Client request queue is full');
+    if (this.queue.length >= this.options.maxQueue) throw new VipsCacheError('QueueFull', 'Client request queue is full');
     await new Promise<void>((resolve, reject) => {
       const waiter: Waiter = { resolve, reject, timer: setTimeout(() => {
         const index = this.queue.indexOf(waiter);
         if (index >= 0) this.queue.splice(index, 1);
-        reject(new ImgCacheError('Timeout', 'Request expired in queue'));
+        reject(new VipsCacheError('Timeout', 'Request expired in queue'));
       }, Math.max(1, deadline - performance.now())) };
       this.queue.push(waiter);
     });
@@ -139,7 +139,7 @@ export class ImgCacheClient {
         this.assertOpen();
         const remaining = () => {
           const ms = Math.ceil(deadline - performance.now());
-          if (ms <= 0) throw new ImgCacheError('Timeout', 'Worker request deadline exceeded');
+          if (ms <= 0) throw new VipsCacheError('Timeout', 'Worker request deadline exceeded');
           return ms;
         };
         // Every in-flight exchange owns its REQ socket. A failed exchange discards it.
@@ -156,19 +156,19 @@ export class ImgCacheClient {
             await socket.send(wire);
             socket.receiveTimeout = Math.max(1, Math.min(remaining(), Math.ceil(attemptDeadline - performance.now())));
             const frames = await socket.receive();
-            if (frames.length !== 1) throw new ImgCacheError('ProtocolError', 'Expected one JSON reply frame');
+            if (frames.length !== 1) throw new VipsCacheError('ProtocolError', 'Expected one JSON reply frame');
             const reply = JSON.parse(frames[0]!.toString()) as Reply;
-            if (!reply || typeof reply.ok !== 'boolean') throw new ImgCacheError('ProtocolError', 'Invalid worker reply');
+            if (!reply || typeof reply.ok !== 'boolean') throw new VipsCacheError('ProtocolError', 'Invalid worker reply');
             if (reply.ok) return reply;
-            if (reply.error?.type !== 'Busy') throw new ImgCacheError(reply.error?.type ?? 'WorkerError', reply.error?.message ?? 'Worker request failed');
+            if (reply.error?.type !== 'Busy') throw new VipsCacheError(reply.error?.type ?? 'WorkerError', reply.error?.message ?? 'Worker request failed');
             const delay = typeof reply.retry_after === 'number' && Number.isFinite(reply.retry_after) ? Math.max(0, reply.retry_after * 1000) : 500;
-            if (delay >= remaining()) throw new ImgCacheError('Timeout', 'Worker stayed busy past deadline');
+            if (delay >= remaining()) throw new VipsCacheError('Timeout', 'Worker stayed busy past deadline');
             await sleep(Math.max(1, delay), undefined, { signal: this.stopping.signal });
           }
         } catch (error) {
           this.assertOpen();
           if ((error as NodeJS.ErrnoException).code !== 'EAGAIN') throw error;
-          if (attempt >= this.options.requestRetries) throw new ImgCacheError('Timeout', 'Worker did not reply within request deadline');
+          if (attempt >= this.options.requestRetries) throw new VipsCacheError('Timeout', 'Worker did not reply within request deadline');
         } finally { this.sockets.delete(socket); if (!socket.closed) socket.close(); }
       }
     } finally { this.release(); }

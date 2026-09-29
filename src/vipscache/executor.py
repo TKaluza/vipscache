@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Protocol
 
-from imgcache.spec import EncodeSpec, NodeSpec, SourceSpec
+from vipscache.spec import EncodeSpec, NodeSpec, SourceSpec
 
 
 class ImageExecutor(Protocol):
@@ -36,7 +36,7 @@ class VipsExecutor:
         try:
             import pyvips
         except ImportError as error:
-            raise RuntimeError("RenderWorker requires pyvips; install imgcache[worker].") from error
+            raise RuntimeError("RenderWorker requires pyvips; install vipscache[worker].") from error
         self._pyvips = pyvips
 
     def libvips_version(self) -> str:

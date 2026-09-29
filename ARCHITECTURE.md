@@ -1,6 +1,6 @@
-# imgcache Architecture
+# vipscache Architecture
 
-`imgcache` is a content-addressed image store for originals and derived image/PDF-page outputs. It models every image request as an immutable `ImageSpec`, stores reusable intermediate nodes as native libvips `.v` files, and stores final delivery files as leaves such as `.webp`, `.png`, or `.jpg`.
+`vipscache` is a content-addressed image store for originals and derived image/PDF-page outputs. It models every image request as an immutable `ImageSpec`, stores reusable intermediate nodes as native libvips `.v` files, and stores final delivery files as leaves such as `.webp`, `.png`, or `.jpg`.
 
 The package is split for two runtime roles:
 
@@ -10,8 +10,8 @@ The package is split for two runtime roles:
 The current package extras reflect that split:
 
 ```text
-pip install imgcache[client]   # includes pyzmq, no pyvips dependency
-pip install imgcache[worker]   # includes pyzmq + pyvips; system libvips must be installed
+pip install vipscache[client]   # includes pyzmq, no pyvips dependency
+pip install vipscache[worker]   # includes pyzmq + pyvips; system libvips must be installed
 ```
 
 ## Core Model
@@ -148,8 +148,8 @@ The first supported out-of-process boundary is ZeroMQ with JSON payloads. This i
 Deployment targets:
 
 - Same local system or one Docker container: client and worker run as separate Python interpreters and communicate over `ipc://`.
-- Docker deployment: client/app container and worker container mount the same imgcache root at their own local paths and communicate over internal `tcp://`.
-- Worker container image: build with `podman build -f Containerfile.worker -t imgcache-worker:local .`.
+- Docker deployment: client/app container and worker container mount the same vipscache root at their own local paths and communicate over internal `tcp://`.
+- Worker container image: build with `podman build -f Containerfile.worker -t vipscache-worker:local .`.
 - The example Compose file in `examples/compose.yaml` exposes the worker only to the internal Compose network.
 - `scripts/stress_worker_memory.sh` runs a longer Podman memory stress test with a hard container memory limit and logs stats under `.stress-runs/`.
 
@@ -201,7 +201,7 @@ Error response:
 ```
 
 A duplicate `materialize` for a leaf that is already being rendered waits at most
-`IMGCACHE_BUSY_TIMEOUT_SECONDS` for the in-flight render instead of blocking a pool
+`VIPSCACHE_BUSY_TIMEOUT_SECONDS` for the in-flight render instead of blocking a pool
 thread for the whole render, then receives a busy reply:
 
 ```json
@@ -256,7 +256,7 @@ authority for pixel geometry — including PDF `/Rotate` axis swaps and EXIF
 orientation — so consumers never derive crop bounds from a separate source such as
 pypdf. `measure` does not write `.v` nodes or mutate the cache tree as a side effect; it is a read-only probe. A worker may memoize the resulting metadata in its local state store, but that store is advisory and must never influence which pixels a key produces.
 
-An `ImgCacheClient` may also keep a bounded in-process metadata memo keyed by the
+An `VipsCacheClient` may also keep a bounded in-process metadata memo keyed by the
 pipeline parent key. This only skips duplicate `identify` roundtrips for identical
 pipelines; it does not affect rendering identity or cache paths.
 
@@ -264,18 +264,18 @@ The client uses REQ semantics with a client-side retry pattern:
 
 - Clients poll for replies with a bounded timeout.
 - On timeout or ZMQ socket error, the client closes and recreates the REQ socket before retrying.
-- Sockets are not shared across threads. A long-lived `ImgCacheClient` may be shared, but its sync ZMQ sockets are lazy per thread or per session.
+- Sockets are not shared across threads. A long-lived `VipsCacheClient` may be shared, but its sync ZMQ sockets are lazy per thread or per session.
 - Sockets use `LINGER=0` so shutdown does not hang on unsent messages.
 - Default timeout is intentionally long because image/PDF work can be CPU-heavy.
 - Async materialization uses an async ZMQ path; callers reach it through `await image`, `image.apath()`, `image.aread_bytes()`, or `client.aget(spec)`.
 
-For local single-host use, prefer `ipc://<runtime-dir>/imgcache-worker.sock`. For Docker container-to-container use, prefer `tcp://worker:<port>` where `worker` is the Compose/service DNS name; do not use `localhost` unless client and worker are inside the same network namespace.
+For local single-host use, prefer `ipc://<runtime-dir>/vipscache-worker.sock`. For Docker container-to-container use, prefer `tcp://worker:<port>` where `worker` is the Compose/service DNS name; do not use `localhost` unless client and worker are inside the same network namespace.
 
 The worker runs a single REP socket when `max_workers=1`. For `max_workers>1`, it uses a ROUTER/DEALER broker with REP worker threads so multiple render jobs can be active in one worker process without changing the core `RenderWorker.materialize(spec)` implementation.
 
 ## Worker State
 
-Workers can optionally keep a local LMDB state store enabled by `IMGCACHE_STATE_DIR`. This directory is worker-local mmap state, not shared cache data: do not place it under the shared imgcache root and do not mount it from a network filesystem.
+Workers can optionally keep a local LMDB state store enabled by `VIPSCACHE_STATE_DIR`. This directory is worker-local mmap state, not shared cache data: do not place it under the shared vipscache root and do not mount it from a network filesystem.
 
 The state store records:
 
@@ -305,27 +305,27 @@ decision, not introduced as drift.
 
 ## Worker Configuration
 
-Worker runtime settings are loaded with `pydantic-settings` from environment variables using the `IMGCACHE_` prefix.
+Worker runtime settings are loaded with `pydantic-settings` from environment variables using the `VIPSCACHE_` prefix.
 
 Defaults:
 
 ```text
-IMGCACHE_ENDPOINT=tcp://*:5555
-IMGCACHE_ROOT=/data
-IMGCACHE_MAX_WORKERS=4
-IMGCACHE_TTL_SECONDS=604800
-IMGCACHE_STATE_DIR=
-IMGCACHE_STATE_MAP_SIZE_MB=1024
-IMGCACHE_BUSY_TIMEOUT_SECONDS=2.0
-IMGCACHE_LIBVIPS_CONCURRENCY=1
-IMGCACHE_LIBVIPS_CACHE_MAX_MEM_MB=128
-IMGCACHE_LIBVIPS_CACHE_MAX_FILES=100
-IMGCACHE_LIBVIPS_CACHE_MAX_OPS=0
+VIPSCACHE_ENDPOINT=tcp://*:5555
+VIPSCACHE_ROOT=/data
+VIPSCACHE_MAX_WORKERS=4
+VIPSCACHE_TTL_SECONDS=604800
+VIPSCACHE_STATE_DIR=
+VIPSCACHE_STATE_MAP_SIZE_MB=1024
+VIPSCACHE_BUSY_TIMEOUT_SECONDS=2.0
+VIPSCACHE_LIBVIPS_CONCURRENCY=1
+VIPSCACHE_LIBVIPS_CACHE_MAX_MEM_MB=128
+VIPSCACHE_LIBVIPS_CACHE_MAX_FILES=100
+VIPSCACHE_LIBVIPS_CACHE_MAX_OPS=0
 ```
 
-`IMGCACHE_LIBVIPS_CONCURRENCY=1` is intentional with `IMGCACHE_MAX_WORKERS=4`: it keeps one render job from expanding into many libvips threads and stealing CPU from other jobs. The worker applies libvips cache settings at process startup.
+`VIPSCACHE_LIBVIPS_CONCURRENCY=1` is intentional with `VIPSCACHE_MAX_WORKERS=4`: it keeps one render job from expanding into many libvips threads and stealing CPU from other jobs. The worker applies libvips cache settings at process startup.
 
-`IMGCACHE_LIBVIPS_CACHE_MAX_OPS=0` disables libvips' operation cache by default. `imgcache` already has its own content-addressed disk cache, and derivative workers typically process many different images, so keeping libvips operation results in RAM is not the default policy.
+`VIPSCACHE_LIBVIPS_CACHE_MAX_OPS=0` disables libvips' operation cache by default. `vipscache` already has its own content-addressed disk cache, and derivative workers typically process many different images, so keeping libvips operation results in RAM is not the default policy.
 
 ## Originals
 
@@ -335,7 +335,7 @@ Originals can be stored flat by content hash:
 <root>/raw/<file_id>
 ```
 
-`ImgCacheClient.register(path)` computes `xxh3-128(content)`, copies the source file atomically into `raw/<file_id>` if needed, and returns a `CachedImage` whose `ImageSpec.source` references the original by `file_id`. `SourceSpec` does not carry an absolute original path. The worker resolves the original path from its own configured root.
+`VipsCacheClient.register(path)` computes `xxh3-128(content)`, copies the source file atomically into `raw/<file_id>` if needed, and returns a `CachedImage` whose `ImageSpec.source` references the original by `file_id`. `SourceSpec` does not carry an absolute original path. The worker resolves the original path from its own configured root.
 
 Clients may memoize file hashes in-process by `(resolved_path, st_mtime_ns,
 st_size)`. On a memo hit, ingest checks whether `raw/<file_id>` already exists
@@ -346,7 +346,7 @@ fresh content hash.
 
 TTL eviction is file-based and deletes old files under `cache/nodes/` and `cache/leaves/`. It does not delete `cache/pinned/` or `raw/`. The current policy uses file `mtime`.
 
-The ZMQ worker exposes an internal `evict_ttl` request, and the underlying function is `imgcache.eviction.evict_ttl(layout, ttl_seconds)`.
+The ZMQ worker exposes an internal `evict_ttl` request, and the underlying function is `vipscache.eviction.evict_ttl(layout, ttl_seconds)`.
 
 ## Repository Map
 
@@ -355,65 +355,65 @@ pyproject.toml
   Project metadata, Python version, extras, and dev dependencies.
 
 Containerfile.worker
-  uv-based worker image. Installs system libvips and syncs imgcache[worker].
+  uv-based worker image. Installs system libvips and syncs vipscache[worker].
 
 .containerignore
   Keeps local virtualenvs, tests, caches, and git data out of container builds.
 
 examples/compose.yaml
-  Compose-style worker deployment with a mounted imgcache root, healthcheck,
-  and IMGCACHE_* defaults.
+  Compose-style worker deployment with a mounted vipscache root, healthcheck,
+  and VIPSCACHE_* defaults.
 
-src/imgcache/__init__.py
+src/vipscache/__init__.py
   Public package exports.
 
-src/imgcache/hash.py
+src/vipscache/hash.py
   Canonical JSON hashing and xxh3-128 file IDs.
 
-src/imgcache/spec.py
+src/vipscache/spec.py
   Immutable source, image, operation, node, and encode specs. Also contains
   canonical operation ordering.
 
-src/imgcache/layout.py
+src/vipscache/layout.py
   Cache-relative path derivation for nodes, pinned nodes, and leaves.
 
-src/imgcache/originals.py
+src/vipscache/originals.py
   Content-addressed raw originals store under <root>/raw.
 
-src/imgcache/eviction.py
+src/vipscache/eviction.py
   TTL eviction for nodes and leaves. Pinned nodes are kept.
 
-src/imgcache/settings.py
+src/vipscache/settings.py
   pydantic-settings worker configuration and libvips runtime cache setup.
 
-src/imgcache/state.py
+src/vipscache/state.py
   Optional worker-local LMDB state for metadata, usage stats, and DAG edges.
 
-src/imgcache/io.py
+src/vipscache/io.py
   Atomic write helper and cache-hit open helper.
 
-src/imgcache/client.py
+src/vipscache/client.py
   Client API. It ingests originals, builds CachedImage objects, computes paths,
   opens hits, and delegates cache misses. This module must remain free of
   pyvips/libvips imports.
 
-src/imgcache/zmq_client.py
+src/vipscache/zmq_client.py
   Client-side ZeroMQ adapter. It sends JSON materialize requests and returns paths.
   This module must remain free of pyvips/libvips imports.
 
-src/imgcache/worker.py
+src/vipscache/worker.py
   Render worker orchestration. It backtracks to the deepest materialized parent,
   builds forward, and writes nodes/leaves atomically.
 
-src/imgcache/zmq_worker.py
+src/vipscache/zmq_worker.py
   Worker-side ZeroMQ server. It receives JSON requests and calls
   RenderWorker.materialize(spec). With max_workers > 1 it uses a ROUTER/DEALER
   broker plus REP worker threads.
 
-src/imgcache/executor.py
+src/vipscache/executor.py
   Worker-side libvips execution adapter. This is where pyvips is imported lazily.
 
-src/imgcache/limits.py
+src/vipscache/limits.py
   Worker-side limits for formats, DPI, and pixel counts.
 
 tests/test_specs.py
@@ -430,14 +430,14 @@ tests/test_state.py
   DAG edges, and state-failure isolation.
 
 tests/test_zmq.py
-  End-to-end IPC test for ImgCacheClient -> ZMQ adapter -> ZmqWorkerServer.
+  End-to-end IPC test for VipsCacheClient -> ZMQ adapter -> ZmqWorkerServer.
 
 tests/test_real_assets.py
   Integration-style tests with a real PDF and a real Wikimedia image.
 
 scripts/test_worker_container.sh
   Podman smoke test. Builds the worker image, runs a ZMQ worker container with
-  a mounted imgcache root, materializes an image derivative from the host
+  a mounted vipscache root, materializes an image derivative from the host
   client, and verifies the cache leaf exists.
 
 scripts/stress_worker_memory.sh
@@ -447,10 +447,6 @@ scripts/stress_worker_memory.sh
   `STRESS_MODE=warm-cache` for realistic cache warmup behavior or
   `STRESS_MODE=cold-derivatives` to delete each requested leaf/materialized
   node before requesting it.
-
-image_page_derivative_engine_plan_v4.md
-  Original architectural plan. Useful context, but ARCHITECTURE.md describes
-  the architecture decisions.
 ```
 
 ## Design Constraints For Future Work

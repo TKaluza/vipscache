@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from imgcache.spec import EncodeSpec, NodeSpec
+from vipscache.spec import EncodeSpec, NodeSpec
 
 
 class SizedImage(Protocol):

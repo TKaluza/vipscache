@@ -7,11 +7,11 @@ from unittest.mock import Mock
 
 import pytest
 
-from imgcache import CacheLayout, ImgCacheClient, MaterializePolicy, Operation, RenderWorker, SourceSpec
-from imgcache.executor import VipsExecutor
-from imgcache.spec import ImageSpec
-from imgcache.zmq_client import ZmqWorkerClient
-from imgcache.zmq_worker import ZmqWorkerServer
+from vipscache import CacheLayout, VipsCacheClient, MaterializePolicy, Operation, RenderWorker, SourceSpec
+from vipscache.executor import VipsExecutor
+from vipscache.spec import ImageSpec
+from vipscache.zmq_client import ZmqWorkerClient
+from vipscache.zmq_worker import ZmqWorkerServer
 
 
 def make_image(path: Path) -> None:
@@ -23,7 +23,7 @@ def make_image(path: Path) -> None:
     path.write_bytes(f"P6\n{width} {height}\n255\n".encode("ascii") + pixels)
 
 
-def test_img_cache_client_materializes_miss_over_zmq(tmp_path):
+def test_vips_cache_client_materializes_miss_over_zmq(tmp_path):
     source_path = tmp_path / "source.ppm"
     make_image(source_path)
     root = tmp_path / "shared"
@@ -33,7 +33,7 @@ def test_img_cache_client_materializes_miss_over_zmq(tmp_path):
     thread.start()
 
     with ZmqWorkerClient(endpoint) as worker_client:
-        client = ImgCacheClient(root, worker_client)
+        client = VipsCacheClient(root, worker_client)
         image = client.register(source_path, mime="image/x-portable-pixmap")
         preview = image.scale(width=16).png()
         path = preview.path()
@@ -46,7 +46,7 @@ def test_img_cache_client_materializes_miss_over_zmq(tmp_path):
     assert path.is_relative_to(root / "cache" / "leaves")
 
 
-def test_img_cache_client_identify_over_zmq(tmp_path):
+def test_vips_cache_client_identify_over_zmq(tmp_path):
     source_path = tmp_path / "source.ppm"
     make_image(source_path)
     root = tmp_path / "shared"
@@ -56,7 +56,7 @@ def test_img_cache_client_identify_over_zmq(tmp_path):
     thread.start()
 
     with ZmqWorkerClient(endpoint) as worker_client:
-        client = ImgCacheClient(root, worker_client)
+        client = VipsCacheClient(root, worker_client)
         image = client.register(source_path, mime="image/x-portable-pixmap").scale(width=16)
         meta = image.identify()
         size = image.size
@@ -94,7 +94,7 @@ def test_zmq_worker_stats(tmp_path):
     thread.start()
 
     with ZmqWorkerClient(endpoint) as worker_client:
-        client = ImgCacheClient(root, worker_client)
+        client = VipsCacheClient(root, worker_client)
         source = client.register(source_path, mime="image/x-portable-pixmap").source
         spec = ImageSpec.build(
             source,
@@ -150,7 +150,7 @@ def test_zmq_busy_duplicate_requests_resolve_transparently(tmp_path):
     root = tmp_path / "shared"
     endpoint = f"ipc://{tmp_path / 'busy.sock'}"
 
-    source = ImgCacheClient(root).register(source_path, mime="image/x-portable-pixmap").source
+    source = VipsCacheClient(root).register(source_path, mime="image/x-portable-pixmap").source
     spec = ImageSpec.build(
         source,
         [Operation("scale", {"width": 16})],
@@ -168,7 +168,7 @@ def test_zmq_busy_duplicate_requests_resolve_transparently(tmp_path):
     def request(name: str) -> None:
         try:
             with ZmqWorkerClient(endpoint, timeout_ms=10_000) as worker_client:
-                results[name] = ImgCacheClient(root, worker_client).get(spec)
+                results[name] = VipsCacheClient(root, worker_client).get(spec)
         except Exception as error:  # pragma: no cover - assertion happens below
             errors[name] = error
 

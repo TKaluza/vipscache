@@ -1,8 +1,8 @@
-from imgcache.client import CachedImage, ImgCacheClient
-from imgcache.layout import CacheLayout
-from imgcache.limits import WorkerLimits
-from imgcache.originals import OriginalsStore
-from imgcache.spec import (
+from vipscache.client import CachedImage, VipsCacheClient
+from vipscache.layout import CacheLayout
+from vipscache.limits import WorkerLimits
+from vipscache.originals import OriginalsStore
+from vipscache.spec import (
     ENGINE_VERSION,
     EncodeSpec,
     ImageSpec,
@@ -12,8 +12,8 @@ from imgcache.spec import (
     SourceSpec,
     canonicalize_operations,
 )
-from imgcache.state import WorkerState
-from imgcache.worker import RenderWorker, WorkerBusyError
+from vipscache.state import WorkerState
+from vipscache.worker import RenderWorker, WorkerBusyError
 
 __all__ = [
     "ENGINE_VERSION",
@@ -21,7 +21,7 @@ __all__ = [
     "CacheLayout",
     "EncodeSpec",
     "ImageSpec",
-    "ImgCacheClient",
+    "VipsCacheClient",
     "MaterializePolicy",
     "NodeSpec",
     "Operation",

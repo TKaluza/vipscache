@@ -4,7 +4,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from imgcache.layout import CacheLayout
+from vipscache.layout import CacheLayout
 
 
 @dataclass(frozen=True)

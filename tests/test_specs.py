@@ -1,4 +1,4 @@
-from imgcache.spec import ImageSpec, EncodeSpec, MaterializePolicy, NodeSpec, Operation, SourceSpec
+from vipscache.spec import ImageSpec, EncodeSpec, MaterializePolicy, NodeSpec, Operation, SourceSpec
 
 
 def test_operation_params_are_canonicalized_for_keys():
