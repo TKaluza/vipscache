@@ -1,4 +1,4 @@
-# imgcache shared client contract
+# vipscache shared client contract
 
 `vectors.json` is a checked-in set of expected results consumed by Python
 (`tests/test_contract.py`) and Node (`clients/node/test/contract.test.mjs`).
@@ -7,7 +7,7 @@ Do not regenerate expected values as part of tests.
 ## Files and keys
 
 - Source IDs: seed-zero XXH3-128 over the complete file bytes, 32 lowercase hex
-  digits. Raw storage: `raw/<file_id>` below the shared imgcache root.
+  digits. Raw storage: `raw/<file_id>` below the shared vipscache root.
 - Canonical JSON: UTF-8, no ASCII escaping or whitespace, object keys sorted by
   Unicode code point. Arrays and operation order are significant. No Unicode
   normalization. Numbers must be finite; portable integers are within
@@ -20,7 +20,7 @@ Do not regenerate expected values as part of tests.
 - Leaf key: canonical JSON containing `engine_version`, `format`,
   `operation: "encode"`, `params`, `parent_key`, `type: "leaf"`.
   Format is lowercase. The encode engine version applies to the whole chain;
-  default is `imgcache-v1`. No output defaults such as quality are injected.
+  default is `vipscache-v1`. No output defaults such as quality are injected.
 - Leaf path: `cache/leaves/<first-two-hex>/<key>.<format>`; only `jpeg` maps
   to extension `jpg`. `tiff` remains `tiff`, matching Python.
 - Source MIME and metadata do not enter the node/leaf key, matching Python.
@@ -43,7 +43,7 @@ NaN/Infinity are rejected instead of creating non-JSON hash inputs.
 One UTF-8 JSON frame per request/reply over REQ/REP:
 
 ```json
-{"method":"materialize","spec":{"source":{"file_id":"<32 hex>","mime":"application/pdf","metadata":{}},"operations":[{"name":"render","params":{"page":1},"materialize":"never"}],"encode":{"format":"png","params":{},"engine_version":"imgcache-v1"}}}
+{"method":"materialize","spec":{"source":{"file_id":"<32 hex>","mime":"application/pdf","metadata":{}},"operations":[{"name":"render","params":{"page":1},"materialize":"never"}],"encode":{"format":"png","params":{},"engine_version":"vipscache-v1"}}}
 ```
 
 `identify` takes the same spec and replies `{ok:true, meta:{...}}`.

@@ -7,7 +7,7 @@ import { xxhash128 } from 'hash-wasm';
 import { canonicalJson, fileId, resolveSpec } from '../dist/index.js';
 const vectors = JSON.parse(await readFile(new URL('../../../contracts/vectors.json', import.meta.url)));
 for (const item of vectors.files) test(`file hash: ${item.name}`, async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'imgcache-hash-'));
+  const dir = await mkdtemp(join(tmpdir(), 'vipscache-hash-'));
   try {
     const path = join(dir, 'file');
     await writeFile(path, Buffer.concat(Array(item.repeat).fill(Buffer.from(item.hex, 'hex'))));

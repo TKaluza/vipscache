@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from imgcache.zmq_worker import ZmqWorkerServer
-from imgcache.zmq_client import ZmqWorkerClient
+from vipscache.zmq_worker import ZmqWorkerServer
+from vipscache.zmq_client import ZmqWorkerClient
 
 
 def test_node_client_against_python_worker(tmp_path):
@@ -21,7 +21,7 @@ def test_node_client_against_python_worker(tmp_path):
     thread.start()
     try:
         subprocess.run(['node', 'test/integration.mjs'], cwd=node, check=True, timeout=30,
-                       env={**os.environ, 'IMGCACHE_ROOT': str(tmp_path), 'IMGCACHE_ENDPOINT': endpoint})
+                       env={**os.environ, 'VIPSCACHE_ROOT': str(tmp_path), 'VIPSCACHE_ENDPOINT': endpoint})
     finally:
         with ZmqWorkerClient(endpoint, timeout_ms=1000, request_retries=0) as client:
             client.shutdown_worker()

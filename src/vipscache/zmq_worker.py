@@ -5,12 +5,12 @@ import threading
 from pathlib import Path
 from typing import Any, Self
 
-from imgcache.eviction import evict_ttl
-from imgcache.layout import CacheLayout
-from imgcache.settings import WorkerSettings, configure_libvips
-from imgcache.spec import ENGINE_VERSION, ImageSpec
-from imgcache.state import WorkerState, state_versions
-from imgcache.worker import RenderWorker, WorkerBusyError
+from vipscache.eviction import evict_ttl
+from vipscache.layout import CacheLayout
+from vipscache.settings import WorkerSettings, configure_libvips
+from vipscache.spec import ENGINE_VERSION, ImageSpec
+from vipscache.state import WorkerState, state_versions
+from vipscache.worker import RenderWorker, WorkerBusyError
 
 
 class ZmqWorkerServer:
@@ -30,7 +30,7 @@ class ZmqWorkerServer:
         try:
             import zmq
         except ImportError as error:
-            raise RuntimeError("ZmqWorkerServer requires pyzmq; install imgcache[worker].") from error
+            raise RuntimeError("ZmqWorkerServer requires pyzmq; install vipscache[worker].") from error
 
         if worker is None and root is None:
             raise ValueError("worker or root is required")
@@ -92,7 +92,7 @@ class ZmqWorkerServer:
             self.serve_one()
 
     def _serve_pool(self) -> None:
-        backend_endpoint = f"inproc://imgcache-workers-{id(self)}"
+        backend_endpoint = f"inproc://vipscache-workers-{id(self)}"
         self._frontend = self._context.socket(self._zmq.ROUTER)
         self._frontend.setsockopt(self._zmq.LINGER, 0)
         self._frontend.bind(self.endpoint)
@@ -248,9 +248,9 @@ class ZmqWorkerServer:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Run an imgcache ZeroMQ render worker.")
+    parser = argparse.ArgumentParser(description="Run an vipscache ZeroMQ render worker.")
     parser.add_argument("--endpoint", help="ZMQ endpoint to bind, e.g. tcp://*:5555")
-    parser.add_argument("--root", help="Shared imgcache root mounted into the worker")
+    parser.add_argument("--root", help="Shared vipscache root mounted into the worker")
     parser.add_argument("--max-workers", type=int, help="Maximum concurrent render jobs")
     parser.add_argument("--ttl-seconds", type=int, help="TTL for file-based eviction")
     args = parser.parse_args(argv)

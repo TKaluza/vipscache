@@ -5,14 +5,14 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 
-from imgcache.executor import ImageExecutor, VipsExecutor
-from imgcache.io import atomic_write
-from imgcache.layout import CacheLayout
-from imgcache.limits import WorkerLimits
-from imgcache.spec import ImageSpec, MaterializePolicy, NodeSpec, SourceSpec
-from imgcache.state import WorkerState
+from vipscache.executor import ImageExecutor, VipsExecutor
+from vipscache.io import atomic_write
+from vipscache.layout import CacheLayout
+from vipscache.limits import WorkerLimits
+from vipscache.spec import ImageSpec, MaterializePolicy, NodeSpec, SourceSpec
+from vipscache.state import WorkerState
 
-_LOGGER = logging.getLogger("imgcache.worker")
+_LOGGER = logging.getLogger("vipscache.worker")
 
 
 class WorkerBusyError(RuntimeError):

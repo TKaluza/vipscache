@@ -45,7 +45,7 @@ export async function resolveSpec(input: ImageSpec): Promise<Resolution> {
     return { name: op.name, params: op.params ?? {}, materialize: policy };
   });
   let parent = spec.source.file_id;
-  const engine = spec.encode?.engine_version ?? 'imgcache-v1';
+  const engine = spec.encode?.engine_version ?? 'vipscache-v1';
   for (const op of spec.operations) {
     parent = await xxhash128(canonicalJson({ engine_version: engine, operation: { name: op.name, params: op.params! }, parent_key: parent, type: 'node' }));
   }

@@ -5,14 +5,14 @@ from urllib.request import Request, urlopen
 
 import pyvips
 
-from imgcache import CacheLayout, ImageSpec, ImgCacheClient, MaterializePolicy, Operation, RenderWorker
+from vipscache import CacheLayout, ImageSpec, VipsCacheClient, MaterializePolicy, Operation, RenderWorker
 
 PDF_URL = "https://ontheline.trincoll.edu/images/bookdown/sample-local-pdf.pdf"
 IMAGE_URL = "https://commons.wikimedia.org/wiki/Special:FilePath/Example_image_not_to_be_used_in_article_namespace.jpg"
 
 
 def download(url: str, path: Path) -> Path:
-    request = Request(url, headers={"User-Agent": "imgcache-test-suite/0.1"})
+    request = Request(url, headers={"User-Agent": "vipscache-test-suite/0.1"})
     with urlopen(request, timeout=30) as response:
         path.write_bytes(response.read())
     return path
@@ -21,7 +21,7 @@ def download(url: str, path: Path) -> Path:
 def test_real_pdf_page_renders_to_png(tmp_path):
     root = tmp_path / "shared"
     pdf = download(PDF_URL, tmp_path / "sample-local-pdf.pdf")
-    source = ImgCacheClient(root).register(pdf, mime="application/pdf").source
+    source = VipsCacheClient(root).register(pdf, mime="application/pdf").source
     spec = ImageSpec.canonical(
         source,
         [Operation("render", {"page": 1, "dpi": 75, "colorspace": "srgb"}, MaterializePolicy.FORCE)],
@@ -39,7 +39,7 @@ def test_real_pdf_page_renders_to_png(tmp_path):
 
 
 def test_real_pdf_identify_matches_rendered_leaf(tmp_path):
-    """imgcache-reported page geometry must equal the actual rendered leaf size.
+    """vipscache-reported page geometry must equal the actual rendered leaf size.
 
     This is the structural guarantee against the pypdf-mediabox vs libvips-render
     mismatch (e.g. /Rotate axis swap): a consumer that crops against identify()
@@ -48,7 +48,7 @@ def test_real_pdf_identify_matches_rendered_leaf(tmp_path):
     root = tmp_path / "shared"
     pdf = download(PDF_URL, tmp_path / "sample-local-pdf.pdf")
     worker = RenderWorker(CacheLayout(root / "cache"))
-    client = ImgCacheClient(root, worker)
+    client = VipsCacheClient(root, worker)
 
     page = client.register(pdf, mime="application/pdf").page(1, dpi=75)
     reported = page.size
@@ -62,7 +62,7 @@ def test_real_pdf_identify_matches_rendered_leaf(tmp_path):
 def test_real_commons_image_derivative_to_webp(tmp_path):
     root = tmp_path / "shared"
     jpg = download(IMAGE_URL, tmp_path / "commons-example.jpg")
-    source = ImgCacheClient(root).register(jpg, mime="image/jpeg").source
+    source = VipsCacheClient(root).register(jpg, mime="image/jpeg").source
     spec = ImageSpec.canonical(
         source,
         [

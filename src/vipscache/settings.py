@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class WorkerSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="IMGCACHE_")
+    model_config = SettingsConfigDict(env_prefix="VIPSCACHE_")
 
     endpoint: str = "tcp://*:5555"
     root: Path = Path("/data")
@@ -30,7 +30,7 @@ def configure_libvips(settings: WorkerSettings) -> None:
     try:
         import pyvips
     except ImportError as error:
-        raise RuntimeError("Worker settings require pyvips; install imgcache[worker].") from error
+        raise RuntimeError("Worker settings require pyvips; install vipscache[worker].") from error
 
     pyvips.cache_set_max_mem(settings.libvips_cache_max_mem_mb * 1024 * 1024)
     pyvips.cache_set_max_files(settings.libvips_cache_max_files)

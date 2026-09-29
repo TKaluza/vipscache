@@ -3,31 +3,31 @@ services:
     build:
       context: ..
       dockerfile: Containerfile.worker
-    image: imgcache-worker:local
+    image: vipscache-worker:local
     environment:
-      IMGCACHE_ENDPOINT: tcp://*:5555
-      IMGCACHE_LIBVIPS_CACHE_MAX_FILES: "100"
-      IMGCACHE_LIBVIPS_CACHE_MAX_MEM_MB: "128"
-      IMGCACHE_LIBVIPS_CACHE_MAX_OPS: "0"
-      IMGCACHE_LIBVIPS_CONCURRENCY: "1"
-      IMGCACHE_MAX_WORKERS: "4"
-      IMGCACHE_ROOT: /data
-      IMGCACHE_STATE_DIR: /state
-      IMGCACHE_TTL_SECONDS: "604800"
+      VIPSCACHE_ENDPOINT: tcp://*:5555
+      VIPSCACHE_LIBVIPS_CACHE_MAX_FILES: "100"
+      VIPSCACHE_LIBVIPS_CACHE_MAX_MEM_MB: "128"
+      VIPSCACHE_LIBVIPS_CACHE_MAX_OPS: "0"
+      VIPSCACHE_LIBVIPS_CONCURRENCY: "1"
+      VIPSCACHE_MAX_WORKERS: "4"
+      VIPSCACHE_ROOT: /data
+      VIPSCACHE_STATE_DIR: /state
+      VIPSCACHE_TTL_SECONDS: "604800"
     volumes:
-      - imgcache-data:/data
-      # Worker-local LMDB mmap state. Do not mount this on the shared imgcache
+      - vipscache-data:/data
+      # Worker-local LMDB mmap state. Do not mount this on the shared vipscache
       # root or on a network filesystem.
-      - imgcache-worker-state:/state
+      - vipscache-worker-state:/state
     expose:
       - "5555"
     healthcheck:
-      test: ["CMD", "imgcache-zmq-healthcheck", "--endpoint", "tcp://127.0.0.1:5555"]
+      test: ["CMD", "vipscache-zmq-healthcheck", "--endpoint", "tcp://127.0.0.1:5555"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 5s
 
 volumes:
-  imgcache-data:
-  imgcache-worker-state:
+  vipscache-data:
+  vipscache-worker-state:

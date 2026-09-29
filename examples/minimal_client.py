@@ -1,10 +1,10 @@
 from pathlib import Path
 
-from imgcache import ImgCacheClient
+from vipscache import VipsCacheClient
 
 
-client = ImgCacheClient.zmq(
-    root="shared/imgcache",
+client = VipsCacheClient.zmq(
+    root="shared/vipscache",
     endpoint="tcp://127.0.0.1:5555",
 )
 

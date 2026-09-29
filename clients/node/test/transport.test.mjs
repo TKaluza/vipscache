@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Reply } from 'zeromq';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { ImgCacheClient } from '../dist/index.js';
+import { VipsCacheClient } from '../dist/index.js';
 async function server(t) {
   const socket = new Reply({linger:0});
   await socket.bind('tcp://127.0.0.1:*');
@@ -10,7 +10,7 @@ async function server(t) {
   return socket;
 }
 function client(t, endpoint, options = {}) {
-  const c = new ImgCacheClient({root:'/tmp',endpoint,timeoutMs:1000,...options});
+  const c = new VipsCacheClient({root:'/tmp',endpoint,timeoutMs:1000,...options});
   t.after(() => c.close());
   return c;
 }

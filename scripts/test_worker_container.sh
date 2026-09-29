@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE_NAME="${IMAGE_NAME:-imgcache-worker:local}"
-CONTAINER_NAME="${CONTAINER_NAME:-imgcache-worker-smoke-$$}"
+IMAGE_NAME="${IMAGE_NAME:-vipscache-worker:local}"
+CONTAINER_NAME="${CONTAINER_NAME:-vipscache-worker-smoke-$$}"
 HOST_PORT="${HOST_PORT:-15555}"
 MEMORY_LIMIT="${MEMORY_LIMIT:-512m}"
 PDF_URL="${PDF_URL:-https://ontheline.trincoll.edu/images/bookdown/sample-local-pdf.pdf}"
@@ -37,7 +37,7 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 import sys
 
-request = Request(sys.argv[1], headers={"User-Agent": "imgcache-container-smoke/0.1"})
+request = Request(sys.argv[1], headers={"User-Agent": "vipscache-container-smoke/0.1"})
 with urlopen(request, timeout=30) as response:
     Path(sys.argv[2]).write_bytes(response.read())
 PY
@@ -49,10 +49,10 @@ podman run \
   --name "$CONTAINER_NAME" \
   --memory "$MEMORY_LIMIT" \
   --publish "127.0.0.1:${HOST_PORT}:5555" \
-  --env IMGCACHE_ENDPOINT=tcp://*:5555 \
-  --env IMGCACHE_MAX_WORKERS=4 \
-  --env IMGCACHE_ROOT=/data \
-  --env IMGCACHE_STATE_DIR=/state \
+  --env VIPSCACHE_ENDPOINT=tcp://*:5555 \
+  --env VIPSCACHE_MAX_WORKERS=4 \
+  --env VIPSCACHE_ROOT=/data \
+  --env VIPSCACHE_STATE_DIR=/state \
   --volume "$TMP_DIR/shared:/data:Z" \
   --volume "$TMP_DIR/state:/state:Z" \
   "$IMAGE_NAME" >/dev/null
@@ -62,8 +62,8 @@ from pathlib import Path
 import sys
 import time
 
-from imgcache import ImgCacheClient
-from imgcache.zmq_client import ZmqWorkerClient
+from vipscache import VipsCacheClient
+from vipscache.zmq_client import ZmqWorkerClient
 
 port = sys.argv[1]
 root = Path(sys.argv[2])
@@ -77,7 +77,7 @@ while time.time() < deadline:
         with ZmqWorkerClient(f"tcp://127.0.0.1:{port}", timeout_ms=1_000, request_retries=0) as worker:
             if not worker.healthcheck():
                 raise RuntimeError("worker healthcheck failed")
-            client = ImgCacheClient(root, worker)
+            client = VipsCacheClient(root, worker)
             image = client.register(host_source, mime="image/x-portable-pixmap")
             image_path = image.scale(width=32).png().path()
             pdf_path = client.register(host_pdf, mime="application/pdf").page(1, dpi=75).png().path()

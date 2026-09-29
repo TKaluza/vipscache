@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import os
 
-from imgcache.eviction import evict_ttl
-from imgcache.layout import CacheLayout
+from vipscache.eviction import evict_ttl
+from vipscache.layout import CacheLayout
 
 
 def test_ttl_eviction_deletes_old_nodes_and_leaves_but_not_pinned(tmp_path):

@@ -2,10 +2,10 @@
 import assert from 'node:assert/strict';
 import { writeFile, unlink, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { ImgCacheClient } from '../dist/index.js';
-const root = process.env.IMGCACHE_ROOT;
-const endpoint = process.env.IMGCACHE_ENDPOINT;
-const client = new ImgCacheClient({root,endpoint,timeoutMs:10000,maxConcurrency:2});
+import { VipsCacheClient } from '../dist/index.js';
+const root = process.env.VIPSCACHE_ROOT;
+const endpoint = process.env.VIPSCACHE_ENDPOINT;
+const client = new VipsCacheClient({root,endpoint,timeoutMs:10000,maxConcurrency:2});
 try {
   assert.equal(await client.healthcheck(), true);
   const input = join(root,'sample.ppm');
@@ -18,7 +18,7 @@ try {
   const results = await Promise.all(Array.from({length:8},() => client.readBytes(spec)));
   for (const data of results) assert.equal(data.subarray(1,4).toString(),'PNG');
   const resolved = await client.resolve(spec);
-  const offline = new ImgCacheClient({root,endpoint:'tcp://127.0.0.1:1',timeoutMs:50,requestRetries:0});
+  const offline = new VipsCacheClient({root,endpoint:'tcp://127.0.0.1:1',timeoutMs:50,requestRetries:0});
   try { assert.deepEqual(await offline.readBytes(spec),results[0]); } finally { offline.close(); }
   await unlink(join(root,resolved.relpath));
   assert.deepEqual(await client.readBytes(spec),results[0]);

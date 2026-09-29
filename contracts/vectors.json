@@ -92,7 +92,7 @@
       },
       "payload": {
         "encode": {
-          "engine_version": "imgcache-v1",
+          "engine_version": "vipscache-v1",
           "format": "png",
           "params": {}
         },
@@ -105,8 +105,8 @@
           "mime": "application/pdf"
         }
       },
-      "key": "4e5aed32651a15b275d862a6b89878ce",
-      "relpath": "cache/leaves/4e/4e5aed32651a15b275d862a6b89878ce.png"
+      "key": "419523a979a803b39d00a97f954c8706",
+      "relpath": "cache/leaves/41/419523a979a803b39d00a97f954c8706.png"
     },
     {
       "name": "pdf",
@@ -151,7 +151,7 @@
       },
       "payload": {
         "encode": {
-          "engine_version": "imgcache-v1",
+          "engine_version": "vipscache-v1",
           "format": "webp",
           "params": {
             "quality": 82
@@ -192,8 +192,8 @@
           "mime": "application/pdf"
         }
       },
-      "key": "5269e123d6b95d190e525195b9132663",
-      "relpath": "cache/leaves/52/5269e123d6b95d190e525195b9132663.webp"
+      "key": "582f54d867a89f98f63bf99d3a21b4b0",
+      "relpath": "cache/leaves/58/582f54d867a89f98f63bf99d3a21b4b0.webp"
     },
     {
       "name": "unicode-floats",
@@ -227,7 +227,7 @@
         ],
         "encode": {
           "format": "JPEG",
-          "engine_version": "imgcache-test",
+          "engine_version": "vipscache-test",
           "params": {
             "quality": 85
           }
@@ -235,7 +235,7 @@
       },
       "payload": {
         "encode": {
-          "engine_version": "imgcache-test",
+          "engine_version": "vipscache-test",
           "format": "jpeg",
           "params": {
             "quality": 85
@@ -270,8 +270,8 @@
           "mime": "application/pdf"
         }
       },
-      "key": "0702030a62dc2b8faa41402995142724",
-      "relpath": "cache/leaves/07/0702030a62dc2b8faa41402995142724.jpg"
+      "key": "b36aee6b96ec770c2fa28823dd645043",
+      "relpath": "cache/leaves/b3/b36aee6b96ec770c2fa28823dd645043.jpg"
     },
     {
       "name": "never",
@@ -298,7 +298,7 @@
       },
       "payload": {
         "encode": {
-          "engine_version": "imgcache-v1",
+          "engine_version": "vipscache-v1",
           "format": "png",
           "params": {}
         },
@@ -319,8 +319,8 @@
           "mime": "application/pdf"
         }
       },
-      "key": "80db77282f9358f348cd9649570c7fd3",
-      "relpath": "cache/leaves/80/80db77282f9358f348cd9649570c7fd3.png"
+      "key": "1d082a6ce2ce803fb5051d91c226a0ef",
+      "relpath": "cache/leaves/1d/1d082a6ce2ce803fb5051d91c226a0ef.png"
     },
     {
       "name": "force",
@@ -347,7 +347,7 @@
       },
       "payload": {
         "encode": {
-          "engine_version": "imgcache-v1",
+          "engine_version": "vipscache-v1",
           "format": "png",
           "params": {}
         },
@@ -368,8 +368,8 @@
           "mime": "application/pdf"
         }
       },
-      "key": "80db77282f9358f348cd9649570c7fd3",
-      "relpath": "cache/leaves/80/80db77282f9358f348cd9649570c7fd3.png"
+      "key": "1d082a6ce2ce803fb5051d91c226a0ef",
+      "relpath": "cache/leaves/1d/1d082a6ce2ce803fb5051d91c226a0ef.png"
     },
     {
       "name": "pin",
@@ -396,7 +396,7 @@
       },
       "payload": {
         "encode": {
-          "engine_version": "imgcache-v1",
+          "engine_version": "vipscache-v1",
           "format": "png",
           "params": {}
         },
@@ -417,8 +417,8 @@
           "mime": "application/pdf"
         }
       },
-      "key": "80db77282f9358f348cd9649570c7fd3",
-      "relpath": "cache/leaves/80/80db77282f9358f348cd9649570c7fd3.png"
+      "key": "1d082a6ce2ce803fb5051d91c226a0ef",
+      "relpath": "cache/leaves/1d/1d082a6ce2ce803fb5051d91c226a0ef.png"
     }
   ]
 }

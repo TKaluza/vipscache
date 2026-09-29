@@ -1,11 +1,31 @@
 [project]
-name = "imgcache"
-version = "0.3.0"
+name = "vipscache"
+version = "0.4.0"
 description = "Content-addressed derivative cache for images and pages."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Tim Kaluza", email = "tim@kaluza.space" }]
 requires-python = ">=3.12"
+keywords = ["image", "cache", "libvips", "pdf", "thumbnails", "zeromq"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Graphics",
+]
 dependencies = [
     "xxhash>=3.5.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/TKaluza/vipscache"
+Repository = "https://github.com/TKaluza/vipscache"
+Issues = "https://github.com/TKaluza/vipscache/issues"
+Changelog = "https://github.com/TKaluza/vipscache/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 client = [
@@ -28,11 +48,11 @@ dev = [
 ]
 
 [project.scripts]
-imgcache-zmq-healthcheck = "imgcache.zmq_client:main"
-imgcache-zmq-worker = "imgcache.zmq_worker:main"
+vipscache-zmq-healthcheck = "vipscache.zmq_client:main"
+vipscache-zmq-worker = "vipscache.zmq_worker:main"
 
 [build-system]
-requires = ["uv_build>=0.11.16,<0.12"]
+requires = ["uv_build>=0.11.16,<0.13"]
 build-backend = "uv_build"
 
 [tool.pytest.ini_options]
