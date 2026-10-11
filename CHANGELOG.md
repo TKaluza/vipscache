@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Remove the ineffective `WorkerLimits.max_copy_memory_bytes` constructor argument;
+  callers must stop passing it. It never enforced a memory limit.
+- Deprecate `NodeSpec.with_materialize()` and `ImageSpec.is_materializable_leaf`
+  with PEP 702 annotations and `DeprecationWarning`, preserving their behavior.
+  Use nested `dataclasses.replace()` calls and `spec.encode is not None` respectively.
+  No removal version is scheduled. Add `typing-extensions` for Python 3.12 support.
+- Reject the unimplemented `alpha` operation during canonical ordering, remove
+  the private `_is_pdf()` forwarding method, and clarify the POSIX requirements
+  of managed publication. Keep `io.open_cache_hit()` as the read extension point.
 - Keep existing `vipscache-v1` keys, paths and contract vectors. Add source-first
   `thumbnail` with explicit EXIF handling and `autorotate` without changing old
   `scale`/`normalize` behavior.

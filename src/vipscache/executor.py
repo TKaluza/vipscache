@@ -103,7 +103,7 @@ class VipsExecutor:
                 pass  # Preserve a precise missing-source error before libvips.
         except FileNotFoundError as error:
             raise VipsCacheError(ErrorType.ORIGINAL_MISSING, str(path)) from error
-        if self._is_pdf(source):
+        if source.is_pdf():
             return self._render_pdf(path, spec.operation.params)
         return self.apply_node(self.load_source(path), spec)
 
@@ -338,9 +338,6 @@ class VipsExecutor:
         if image.hasalpha():
             return image.flatten(background=background)
         return image
-
-    def _is_pdf(self, source: SourceSpec) -> bool:
-        return source.is_pdf()
 
 
 def _interpretation_to_mode(image: Any) -> str:

@@ -380,6 +380,7 @@ name = "vipscache"
 version = "0.4.2"
 source = { editable = "." }
 dependencies = [
+    { name = "typing-extensions" },
     { name = "xxhash" },
 ]
 
@@ -411,6 +412,7 @@ requires-dist = [
     { name = "pyvips", marker = "extra == 'worker'", specifier = ">=3.0.0" },
     { name = "pyzmq", marker = "extra == 'client'", specifier = ">=26.0.0" },
     { name = "pyzmq", marker = "extra == 'worker'", specifier = ">=26.0.0" },
+    { name = "typing-extensions", specifier = ">=4.8" },
     { name = "xxhash", specifier = ">=3.5.0" },
 ]
 provides-extras = ["client", "worker"]

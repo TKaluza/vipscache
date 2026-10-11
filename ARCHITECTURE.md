@@ -68,7 +68,7 @@ The canonical operation order is:
 
 ```text
 page / render / thumbnail
-normalize / colorspace / alpha
+normalize / colorspace
 fast_rotate / flip / flop / autorotate
 crop
 scale / resize
@@ -712,22 +712,24 @@ interaction.
 ### Object Store Direction And The ZMQ Data Plane
 
 The POSIX root may later be complemented by an object store backend (S3 via
-obstore). The seam for this already exists: `io.py` is the only place that
-touches the filesystem for cache content, and the layout derives POSIX-relative
-paths everywhere. An object store backend is a small store interface at that
-seam — `read`, `write_atomic`, `exists`, `delete` — with the POSIX
-implementation being today's behavior and an obstore implementation added
-alongside, not instead.
+obstore). Client reads pass through `io.open_cache_hit()`, which remains an
+extension point for a future storage backend. Managed publication currently
+requires POSIX semantics: the catalog and worker also use `os.replace`, `os.link`
+and `fsync` directly. File existence checks and decoding are not centralized in
+`io.py`. An object store backend would therefore need a storage interface for
+reads, publication, existence and deletion, together with matching retention and
+coordination rules. The existing read helper alone does not abstract those operations.
 
-The mapping is nearly one-to-one:
+Some path and read semantics can carry over:
 
 - Relative cache paths become object keys unchanged.
 - "open = cache hit" becomes "GET = hit"; a 404 is the miss that triggers
   `materialize` over ZMQ, then a second GET.
 - S3 PUT is atomic per object, so the temp-file + `os.replace` dance is simply
   unnecessary there; atomic publication is preserved by the store semantics.
-- TTL eviction maps to native object lifecycle rules; `pinned/` and `raw/`
-  prefixes are excluded from expiry, mirroring today's policy.
+- Native object lifecycle rules would need to respect catalog retention.
+  Excluding `pinned/` and `raw/` prefixes alone is insufficient: pinned leaves
+  share `leaves/` paths with expiring leaves.
 
 Placement is deliberate: `raw/` originals and encoded leaves belong in the
 shared store, because they are what clients and delivery need. `.v` nodes stay

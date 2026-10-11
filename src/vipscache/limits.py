@@ -22,7 +22,6 @@ class WorkerLimits:
     max_dpi: int | None = None
     max_input_pixels: int | None = None
     max_output_pixels: int | None = None
-    max_copy_memory_bytes: int | None = None
 
     def check_leaf(self, spec: EncodeSpec) -> None:
         if spec.format not in self.allowed_formats:

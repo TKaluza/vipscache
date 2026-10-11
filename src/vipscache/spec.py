@@ -5,6 +5,8 @@ from enum import StrEnum
 from functools import cached_property
 from typing import Any, Literal, Self
 
+from typing_extensions import deprecated
+
 from vipscache.hash import hash_canonical
 
 ENGINE_VERSION = "vipscache-v1"
@@ -115,7 +117,12 @@ class NodeSpec:
     def materialize(self) -> MaterializePolicy:
         return self.operation.materialize
 
+    @deprecated(
+        "NodeSpec.with_materialize() is deprecated; use "
+        "dataclasses.replace(node, operation=dataclasses.replace(node.operation, materialize=policy))."
+    )
     def with_materialize(self, policy: MaterializePolicy) -> Self:
+        """Return a node with a different storage policy; prefer dataclasses.replace()."""
         return replace(
             self,
             operation=replace(self.operation, materialize=policy),
@@ -245,7 +252,9 @@ class ImageSpec:
         return not self.operations and self.encode is None
 
     @property
+    @deprecated("ImageSpec.is_materializable_leaf is deprecated; use spec.encode is not None.")
     def is_materializable_leaf(self) -> bool:
+        """Report whether an encoder is selected; prefer spec.encode is not None."""
         return self.encode is not None
 
     @classmethod
@@ -365,7 +374,7 @@ def _operation_stage(source: SourceSpec, operation: Operation) -> int | None:
         return 0
     if operation.name == "render":
         return 0 if source.is_pdf() else None
-    if operation.name in {"normalize", "colorspace", "alpha"}:
+    if operation.name in {"normalize", "colorspace"}:
         return 1
     if operation.name in {"fast_rotate", "flip", "flop", "autorotate"}:
         return 2
