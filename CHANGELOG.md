@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0
 
 - Remove the ineffective `WorkerLimits.max_copy_memory_bytes` constructor argument;
   callers must stop passing it. It never enforced a memory limit.

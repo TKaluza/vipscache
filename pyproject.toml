@@ -1,6 +1,6 @@
 [project]
 name = "vipscache"
-version = "0.4.2"
+version = "0.5.0"
 description = "Content-addressed derivative cache for images and pages."
 readme = "README.md"
 license = "MIT"
