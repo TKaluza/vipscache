@@ -47,6 +47,7 @@ dev = [
     "pyvips>=3.0.0",
     "pyzmq>=26.0.0",
     "pytest>=8.0.0",
+    "ty>=0.0.86",
 ]
 
 [project.scripts]

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from vipscache.errors import InvalidSpecError, LimitExceededError
 from vipscache.spec import EncodeSpec, NodeSpec
 
 
@@ -13,6 +14,8 @@ class SizedImage(Protocol):
 
 @dataclass(frozen=True)
 class WorkerLimits:
+    """Reject image dimensions and render parameters that exceed configured limits."""
+
     allowed_formats: frozenset[str] = field(
         default_factory=lambda: frozenset({"webp", "png", "jpg", "jpeg", "avif", "tif", "tiff"})
     )
@@ -23,14 +26,14 @@ class WorkerLimits:
 
     def check_leaf(self, spec: EncodeSpec) -> None:
         if spec.format not in self.allowed_formats:
-            raise ValueError(f"format is not allowed: {spec.format}")
+            raise InvalidSpecError(f"format is not allowed: {spec.format}")
 
     def check_node(self, spec: NodeSpec) -> None:
         if spec.operation.name != "render" or self.max_dpi is None:
             return
         dpi = spec.operation.params.get("dpi")
         if dpi is not None and int(dpi) > self.max_dpi:
-            raise ValueError(f"dpi exceeds worker limit: {dpi}")
+            raise LimitExceededError(f"dpi exceeds worker limit: {dpi}")
 
     def check_input_image(self, image: SizedImage) -> None:
         if self.max_input_pixels is None:
@@ -45,4 +48,4 @@ class WorkerLimits:
     def _check_pixels(self, image: SizedImage, limit: int, label: str) -> None:
         pixels = image.width * image.height
         if pixels > limit:
-            raise ValueError(f"{label} image exceeds pixel limit: {pixels} > {limit}")
+            raise LimitExceededError(f"{label} image exceeds pixel limit: {pixels} > {limit}")

@@ -1,31 +1,36 @@
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any, Protocol
 
+from vipscache.errors import ErrorType, InvalidSpecError, VipsCacheError
 from vipscache.spec import EncodeSpec, NodeSpec, SourceSpec
 
 
 class ImageExecutor(Protocol):
-    def load_source(self, path: Path) -> Any:
-        ...
+    """Rendering operations required by a worker, independent of the image backend."""
 
-    def render_source(self, source: SourceSpec, path: Path, spec: NodeSpec) -> Any:
-        ...
+    def load_source(self, path: Path) -> Any: ...
 
-    def load_node(self, path: Path) -> Any:
+    def render_source(self, source: SourceSpec, path: Path, spec: NodeSpec) -> Any: ...
+
+    def load_node(self, path: Path) -> Any: ...
+
+    def thumbnail_source(self, path: Path, spec: NodeSpec, header: Any) -> Any:
+        """Shrink during decoding while respecting orientation and the requested geometry."""
         ...
 
     def apply_node(self, image: Any, spec: NodeSpec) -> Any:
+        """Apply one validated pipeline operation to a libvips image."""
         ...
 
-    def write_node(self, image: Any, path: Path) -> None:
-        ...
+    def write_node(self, image: Any, path: Path) -> None: ...
 
-    def write_leaf(self, image: Any, spec: EncodeSpec, path: Path) -> None:
-        ...
+    def write_leaf(self, image: Any, spec: EncodeSpec, path: Path) -> None: ...
 
     def metadata(self, image: Any) -> dict[str, Any]:
+        """Read image headers and normalize them for the public metadata API."""
         ...
 
 
@@ -36,28 +41,84 @@ class VipsExecutor:
         try:
             import pyvips
         except ImportError as error:
-            raise RuntimeError("RenderWorker requires pyvips; install vipscache[worker].") from error
+            raise RuntimeError(
+                "RenderWorker requires pyvips; install vipscache[worker]."
+            ) from error
         self._pyvips = pyvips
 
     def libvips_version(self) -> str:
         return ".".join(str(self._pyvips.version(part)) for part in range(3))
 
     def load_source(self, path: Path) -> Any:
-        return self._pyvips.Image.new_from_file(str(path), access="random")
+        try:
+            # Report a missing original at the source boundary, not by guessing
+            # from every FileNotFoundError raised elsewhere in the worker.
+            with path.open("rb"):
+                pass
+        except FileNotFoundError as error:
+            raise VipsCacheError(ErrorType.ORIGINAL_MISSING, str(path)) from error
+        try:
+            return self._pyvips.Image.new_from_file(str(path), access="random")
+        except self._pyvips.Error as error:
+            raise VipsCacheError(ErrorType.UNREADABLE_FORMAT, str(error)) from error
+
+    def thumbnail_source(self, path: Path, spec: NodeSpec, header: Any) -> Any:
+        """Shrink during decoding while respecting orientation and the requested geometry."""
+        params = spec.operation.params
+        if "vips-loader" in header.get_fields() and str(header.get("vips-loader")).startswith(
+            "pdf"
+        ):
+            raise InvalidSpecError("thumbnail requires an image source; use render for PDFs")
+        # The header probe is lazy; the actual thumbnail decoder still shrinks on load.
+        width, height = header.width, header.height
+        if (
+            params["autorotate"]
+            and "orientation" in header.get_fields()
+            and header.get("orientation") in {5, 6, 7, 8}
+        ):
+            width, height = height, width
+        if "longest_edge" in params:
+            target_width = target_height = params["longest_edge"]
+        elif "width" in params and "height" in params:
+            target_width, target_height = params["width"], params["height"]
+        elif "width" in params:
+            target_width = params["width"]
+            target_height = max(1, math.ceil(height * target_width / width))
+        else:
+            target_height = params["height"]
+            target_width = max(1, math.ceil(width * target_height / height))
+        if max(target_width, target_height) > 10_000_000:
+            raise InvalidSpecError("thumbnail dimensions exceed libvips coordinate range")
+        return self._pyvips.Image.thumbnail(
+            str(path),
+            target_width,
+            height=target_height,
+            size="both",
+            no_rotate=not params["autorotate"],
+        )
 
     def render_source(self, source: SourceSpec, path: Path, spec: NodeSpec) -> Any:
+        try:
+            with path.open("rb"):
+                pass  # Preserve a precise missing-source error before libvips.
+        except FileNotFoundError as error:
+            raise VipsCacheError(ErrorType.ORIGINAL_MISSING, str(path)) from error
         if self._is_pdf(source):
             return self._render_pdf(path, spec.operation.params)
         return self.apply_node(self.load_source(path), spec)
 
     def load_node(self, path: Path) -> Any:
         with path.open("rb"):
-            pass
+            pass  # A missing intermediate lets the worker try another parent.
         return self._pyvips.Image.new_from_file(str(path), access="random")
 
     def apply_node(self, image: Any, spec: NodeSpec) -> Any:
+        """Apply one validated pipeline operation to a libvips image."""
         op = spec.operation
         params = op.params
+
+        if op.name == "autorotate":
+            return image.autorot()
 
         if op.name == "render":
             return self._render(image, params)
@@ -66,11 +127,13 @@ class VipsExecutor:
         if op.name == "fast_rotate":
             degrees = int(params.get("degrees", params.get("angle", 0))) % 360
             if degrees not in {0, 90, 180, 270}:
-                raise ValueError("fast_rotate only supports 0, 90, 180, or 270 degrees")
+                raise InvalidSpecError("fast_rotate only supports 0, 90, 180, or 270 degrees")
             return self._fast_rotate(image, degrees)
         if op.name == "rotate":
             degrees = float(params["degrees"])
-            return image.similarity(angle=degrees, interpolate=self._pyvips.Interpolate.new("bicubic"))
+            return image.similarity(
+                angle=degrees, interpolate=self._pyvips.Interpolate.new("bicubic")
+            )
         if op.name == "flip":
             return image.flip("vertical")
         if op.name == "flop":
@@ -98,7 +161,7 @@ class VipsExecutor:
             scale_factor = params.get("scale_factor")
             return self._resize(image, width, height, longest_edge, scale_factor)
 
-        raise ValueError(f"unsupported operation: {op.name}")
+        raise InvalidSpecError(f"unsupported operation: {op.name}")
 
     def write_node(self, image: Any, path: Path) -> None:
         image.write_to_file(str(path))
@@ -113,6 +176,7 @@ class VipsExecutor:
         output.write_to_file(str(path), **options)
 
     def metadata(self, image: Any) -> dict[str, Any]:
+        """Read image headers and normalize them for the public metadata API."""
         fields = set(image.get_fields())
         meta: dict[str, Any] = {
             "width": int(image.width),
@@ -140,20 +204,24 @@ class VipsExecutor:
 
     def _crop(self, image: Any, x: int, y: int, w: int, h: int) -> Any:
         if w <= 0 or h <= 0:
-            raise ValueError(f"crop width and height must be positive (w={w}, h={h})")
+            raise InvalidSpecError(f"crop width and height must be positive (w={w}, h={h})")
         if x < 0 or y < 0 or x + w > image.width or y + h > image.height:
-            raise ValueError(
+            raise InvalidSpecError(
                 f"crop region (x={x}, y={y}, w={w}, h={h}) is outside image bounds "
                 f"({image.width}x{image.height})"
             )
         return image.crop(x, y, w, h)
 
-    def _crop_fraction(self, image: Any, left: float, top: float, right: float, bottom: float) -> Any:
+    def _crop_fraction(
+        self, image: Any, left: float, top: float, right: float, bottom: float
+    ) -> Any:
         for name, value in (("left", left), ("top", top), ("right", right), ("bottom", bottom)):
             if not 0.0 <= value <= 1.0:
-                raise ValueError(f"crop_fraction {name} must be within [0.0, 1.0], got {value}")
+                raise InvalidSpecError(
+                    f"crop_fraction {name} must be within [0.0, 1.0], got {value}"
+                )
         if right <= left or bottom <= top:
-            raise ValueError(
+            raise InvalidSpecError(
                 f"crop_fraction requires left<right and top<bottom "
                 f"(left={left}, right={right}, top={top}, bottom={bottom})"
             )
@@ -165,9 +233,9 @@ class VipsExecutor:
         h = max(1, min(int(round(bottom * height)) - y, height - y))
         return image.crop(x, y, w, h)
 
-    def _render(self, image: Any, params: dict[str, object]) -> Any:
+    def _render(self, image: Any, params: dict[str, Any]) -> Any:
         if "dpi" in params:
-            raise ValueError("dpi render strategy is only supported for PDF sources")
+            raise InvalidSpecError("dpi render strategy is only supported for PDF sources")
         rendered = self._colorspace(image, str(params.get("colorspace", "srgb")))
 
         width = params.get("width")
@@ -176,16 +244,17 @@ class VipsExecutor:
         scale_factor = params.get("scale_factor")
         resize_args = [width, height, longest_edge, scale_factor]
         if sum(value is not None for value in resize_args) > 1:
-            raise ValueError("render accepts exactly one size strategy")
+            raise InvalidSpecError("render accepts exactly one size strategy")
         if any(value is not None for value in resize_args):
             return self._resize(rendered, width, height, longest_edge, scale_factor)
         return rendered
 
-    def _render_pdf(self, path: Path, params: dict[str, object]) -> Any:
-        options: dict[str, object] = {"access": "random"}
+    def _render_pdf(self, path: Path, params: dict[str, Any]) -> Any:
+        """Load the selected PDF pages using one rendering size strategy."""
+        options: dict[str, Any] = {"access": "random"}
         page = int(params.get("page", 1))
         if page < 1:
-            raise ValueError("render page is one-based and must be >= 1")
+            raise InvalidSpecError("render page is one-based and must be >= 1")
         options["page"] = page - 1
         options["n"] = int(params.get("n", 1))
         width = params.get("width")
@@ -198,7 +267,7 @@ class VipsExecutor:
             longest_edge is not None,
         ]
         if sum(size_strategies) > 1:
-            raise ValueError("render accepts exactly one size strategy")
+            raise InvalidSpecError("render accepts exactly one size strategy")
 
         if "dpi" in params:
             options["dpi"] = float(params["dpi"])
@@ -216,14 +285,19 @@ class VipsExecutor:
     def _resize(
         self,
         image: Any,
-        width: object | None,
-        height: object | None,
-        longest_edge: object | None,
-        scale_factor: object | None,
+        width: int | float | str | None,
+        height: int | float | str | None,
+        longest_edge: int | float | str | None,
+        scale_factor: int | float | str | None,
     ) -> Any:
-        strategies = [width is not None or height is not None, longest_edge is not None, scale_factor is not None]
+        """Resolve one size strategy to libvips scale factors."""
+        strategies = [
+            width is not None or height is not None,
+            longest_edge is not None,
+            scale_factor is not None,
+        ]
         if sum(strategies) != 1:
-            raise ValueError("resize accepts exactly one size strategy")
+            raise InvalidSpecError("resize accepts exactly one size strategy")
 
         if scale_factor is not None:
             factor = float(scale_factor)
@@ -232,16 +306,15 @@ class VipsExecutor:
             factor = edge / max(image.width, image.height)
         else:
             if width is None:
-                ratio = int(height) / image.height
-                factor = ratio
+                assert height is not None
+                factor = int(height) / image.height
             elif height is None:
-                ratio = int(width) / image.width
-                factor = ratio
+                factor = int(width) / image.width
             else:
                 return image.resize(int(width) / image.width, vscale=int(height) / image.height)
 
         if factor <= 0:
-            raise ValueError("resize dimensions must be positive")
+            raise InvalidSpecError("resize dimensions must be positive")
         return image.resize(factor)
 
     def _colorspace(self, image: Any, colorspace: str) -> Any:
@@ -250,7 +323,7 @@ class VipsExecutor:
             return image.colourspace("srgb")
         if colorspace in {"b-w", "bw", "grey", "gray", "greyscale", "grayscale"}:
             return image.colourspace("b-w")
-        raise ValueError(f"unsupported colorspace: {colorspace}")
+        raise InvalidSpecError(f"unsupported colorspace: {colorspace}")
 
     def _fast_rotate(self, image: Any, degrees: int) -> Any:
         if degrees == 0:

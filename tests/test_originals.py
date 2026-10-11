@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import vipscache.client
-from vipscache.hash import file_id
 from vipscache import VipsCacheClient
+from vipscache.hash import file_id
 from vipscache.originals import OriginalsStore
 
 
@@ -55,12 +55,12 @@ def test_async_registration_and_reads_match_sync(tmp_path):
     source = tmp_path / "source.bin"
     source.write_bytes(b"sync and async API")
     client = VipsCacheClient(tmp_path / "shared")
-    options = {"mime": "application/octet-stream", "metadata": {"label": "test"}}
-    image = client.register(source, **options)
+    metadata = {"label": "test"}
+    image = client.register(source, mime="application/octet-stream", metadata=metadata)
     assert image.read_bytes() == source.read_bytes()
 
     async def run():
-        current = await client.aregister(source, **options)
+        current = await client.aregister(source, mime="application/octet-stream", metadata=metadata)
         assert current.spec == image.spec
         assert await current.aread_bytes() == source.read_bytes()
         assert await client.aresolve(image.spec) == client.resolve(image.spec)

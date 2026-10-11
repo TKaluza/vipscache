@@ -16,8 +16,15 @@ class MaterializePolicy(StrEnum):
     PIN = "pin"
 
 
+class RetainPolicy(StrEnum):
+    TTL = "ttl"
+    PIN = "pin"
+
+
 @dataclass(frozen=True)
 class SourceSpec:
+    """Identify original content and carry source metadata used by the pipeline."""
+
     file_id: str
     mime: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -57,12 +64,14 @@ class SourceSpec:
 
 @dataclass(frozen=True)
 class Operation:
+    """Describe one transformation and its optional intermediate storage policy."""
+
     name: str
     params: dict[str, Any] = field(default_factory=dict)
     materialize: MaterializePolicy = MaterializePolicy.NEVER
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "params", dict(sorted(self.params.items())))
+        object.__setattr__(self, "params", normalize_operation_params(self.name, self.params))
         if not isinstance(self.materialize, MaterializePolicy):
             object.__setattr__(self, "materialize", MaterializePolicy(self.materialize))
 
@@ -84,12 +93,16 @@ class Operation:
         return cls(
             name=payload["name"],
             params=payload.get("params", {}),
-            materialize=MaterializePolicy(payload.get("materialize", MaterializePolicy.NEVER.value)),
+            materialize=MaterializePolicy(
+                payload.get("materialize", MaterializePolicy.NEVER.value)
+            ),
         )
 
 
 @dataclass(frozen=True)
 class NodeSpec:
+    """Address an intermediate image by its parent and transformation."""
+
     parent_key: str
     operation: Operation
     engine_version: str = ENGINE_VERSION
@@ -134,12 +147,16 @@ class NodeSpec:
 
 @dataclass(frozen=True)
 class EncodeSpec:
+    """Address an encoded leaf by its parent, format and encoder options."""
+
     parent_key: str
     format: Literal["webp", "png", "jpg", "jpeg", "avif", "tif", "tiff"]
     params: dict[str, Any] = field(default_factory=dict)
     engine_version: str = ENGINE_VERSION
 
     def __post_init__(self) -> None:
+        if "retain" in self.params:
+            raise ValueError("retain belongs to ensure(), not the encoder")
         object.__setattr__(self, "format", self.format.lower())
         object.__setattr__(self, "params", dict(sorted(self.params.items())))
 
@@ -181,12 +198,16 @@ class EncodeSpec:
 
 @dataclass(frozen=True)
 class ImageSpec:
+    """Describe a complete immutable source, transformation chain and optional encoding."""
+
     source: SourceSpec
     operations: tuple[Operation, ...] = ()
     encode: EncodeSpec | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "operations", tuple(self.operations))
+        if any(op.name == "thumbnail" for op in self.operations[1:]):
+            raise ValueError("thumbnail must be the first operation")
         if self.encode is not None:
             object.__setattr__(self, "encode", self._encode_with_current_parent(self.encode))
 
@@ -271,7 +292,9 @@ class ImageSpec:
             if not output_format:
                 raise ValueError("encode operation requires a 'format' param")
             params = {k: v for k, v in encode.params.items() if k != "format"}
-            leaf = EncodeSpec(self._parent_key_for(engine_version), output_format, params, engine_version)
+            leaf = EncodeSpec(
+                self._parent_key_for(engine_version), output_format, params, engine_version
+            )
         return replace(self, encode=leaf)
 
     def _encode_with_current_parent(self, encode: EncodeSpec) -> EncodeSpec:
@@ -294,13 +317,19 @@ class ImageSpec:
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> Self:
+        if "retain" in payload:
+            raise ValueError("retain belongs to ensure(), not ImageSpec")
         source = SourceSpec.from_payload(payload["source"])
-        operations = tuple(Operation.from_payload(operation) for operation in payload.get("operations", []))
+        operations = tuple(
+            Operation.from_payload(operation) for operation in payload.get("operations", [])
+        )
         spec = cls(source=source, operations=operations)
         encode_payload = payload.get("encode")
         if encode_payload is None:
             return spec
-        return spec.with_encode(EncodeSpec.from_payload({"parent_key": spec.parent_key, **encode_payload}))
+        return spec.with_encode(
+            EncodeSpec.from_payload({"parent_key": spec.parent_key, **encode_payload})
+        )
 
     def _encode_payload(self) -> dict[str, Any] | None:
         if self.encode is None:
@@ -316,6 +345,7 @@ def canonicalize_operations(
     source: SourceSpec,
     operations: list[Operation] | tuple[Operation, ...],
 ) -> tuple[Operation, ...]:
+    """Arrange operations in the stable project order, preserving order within each stage."""
     buckets: dict[int, list[Operation]] = {stage: [] for stage in range(6)}
 
     for operation in operations:
@@ -331,11 +361,13 @@ def canonicalize_operations(
 
 
 def _operation_stage(source: SourceSpec, operation: Operation) -> int | None:
+    if operation.name == "thumbnail":
+        return 0
     if operation.name == "render":
         return 0 if source.is_pdf() else None
     if operation.name in {"normalize", "colorspace", "alpha"}:
         return 1
-    if operation.name in {"fast_rotate", "flip", "flop"}:
+    if operation.name in {"fast_rotate", "flip", "flop", "autorotate"}:
         return 2
     if operation.name in {"crop", "crop_fraction"}:
         return 3
@@ -344,3 +376,31 @@ def _operation_stage(source: SourceSpec, operation: Operation) -> int | None:
     if operation.name == "rotate":
         return 5
     raise ValueError(f"unsupported canonical operation: {operation.name}")
+
+
+def normalize_operation_params(name: str, params: dict[str, Any]) -> dict[str, Any]:
+    """Normalize defaults and validate operation-specific parameters before hashing."""
+    params = dict(params)
+    if name == "thumbnail":
+        params.setdefault("autorotate", True)
+        validate_thumbnail(params)
+    return dict(sorted(params.items()))
+
+
+def validate_thumbnail(params: dict[str, Any]) -> None:
+    """Require supported thumbnail dimensions and an explicit boolean rotation policy."""
+    if set(params) - {"width", "height", "longest_edge", "autorotate"}:
+        raise ValueError("unsupported thumbnail parameter")
+    sizes = {key: value for key, value in params.items() if key != "autorotate"}
+    if not sizes or ("longest_edge" in sizes and len(sizes) != 1):
+        raise ValueError("thumbnail requires longest_edge or width/height")
+    for value in sizes.values():
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, int)
+            or value <= 0
+            or value > 2_147_483_647
+        ):
+            raise ValueError("thumbnail dimensions must be positive 32-bit integers")
+    if not isinstance(params.get("autorotate", True), bool):
+        raise ValueError("thumbnail autorotate must be boolean")

@@ -1,6 +1,6 @@
 // Runs against an actual Python worker; also used unchanged in the Node container.
 import assert from 'node:assert/strict';
-import { writeFile, unlink, readFile } from 'node:fs/promises';
+import { writeFile, unlink, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { VipsCacheClient } from '../dist/index.js';
 const root = process.env.VIPSCACHE_ROOT;
@@ -42,5 +42,22 @@ try {
   const pdfMeta = await client.identify(pdfSpec);
   assert.equal(pdfMeta.width,72); assert.equal(pdfMeta.height,36);
   assert.equal((await client.readBytes(pdfSpec)).subarray(1,4).toString(),'PNG');
-  console.log('PASS: register, metadata, render, concurrent calls, offline cache hit, eviction recovery, worker error, PDF page/crop');
+  // Link a known source hash, then retain a leaf without changing its bytes/key.
+  await client.unlink(source.file_id);
+  await client.link(input, {file_id:source.file_id});
+  assert.equal((await stat(input)).ino, (await stat(join(root,'raw',source.file_id))).ino);
+  const thumb = {source,operations:[{name:'thumbnail',params:{longest_edge:4},materialize:'force'}],encode:{format:'png'}};
+  const bytes = await client.readBytes(thumb);
+  const pinned = thumb;
+  const pinnedPath = await client.ensure(pinned, {retain:'pin'});
+  assert.equal(pinnedPath, join(root, (await client.resolve(thumb)).relpath));
+  assert.deepEqual(await client.readBytes(pinned),bytes);
+  await client.unlink(source.file_id);
+  assert.deepEqual(await client.readBytes(pinned),bytes);
+  await client.unpin(pinned);
+  await client.delete([pinned]);
+  await client.delete([pinned]);
+  // The forced node remains after targeted leaf deletion and raw unlink.
+  assert.deepEqual(await client.readBytes(thumb),bytes);
+  console.log('PASS: register/link/unlink, metadata, concurrent render, offline hit, errors, PDF, thumbnail, force, pin/unpin/delete');
 } finally { client.close(); }

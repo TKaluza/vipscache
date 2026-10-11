@@ -7,6 +7,7 @@ from pathlib import Path
 
 
 def atomic_write(path: Path, writer: Callable[[Path], None]) -> Path:
+    """Write to a sibling temporary file and atomically replace the destination."""
     path.parent.mkdir(parents=True, exist_ok=True)
     suffix = path.suffix or ".tmp"
     fd, tmp_name = tempfile.mkstemp(

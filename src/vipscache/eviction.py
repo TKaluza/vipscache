@@ -4,6 +4,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from vipscache.errors import ErrorType, VipsCacheError
 from vipscache.layout import CacheLayout
 
 
@@ -14,6 +15,11 @@ class EvictionReport:
 
 
 def evict_ttl(layout: CacheLayout, ttl_seconds: int, *, now: float | None = None) -> EvictionReport:
+    """Remove expired unpinned files from an unmanaged cache only."""
+    if layout.management_marker.exists():
+        raise VipsCacheError(
+            ErrorType.MANAGEMENT_REQUIRED, "use the retention owner to clean this managed cache"
+        )
     cutoff = (time.time() if now is None else now) - ttl_seconds
     deleted_files = 0
     deleted_bytes = 0

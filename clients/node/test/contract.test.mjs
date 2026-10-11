@@ -24,3 +24,10 @@ for (const item of vectors.specs) test(`spec: ${item.name}`, async () => {
 test('reject non-JSON and lossy numbers', () => {
   for (const value of [NaN, Infinity, 2**53, undefined, {a:undefined}, '\ud800']) assert.throws(() => canonicalJson(value));
 });
+for (const item of vectors.requests) test(`request: ${item.name}`, async () => {
+  const resolved = await resolveSpec(item.input);
+  assert.deepEqual({method:'ensure',spec:resolved.spec,retain:item.request.retain}, item.request);
+  assert.equal(resolved.key, item.key);
+  assert.equal(resolved.relpath, item.relpath);
+  assert.equal('retain' in resolved.spec, false);
+});

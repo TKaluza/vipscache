@@ -17,6 +17,8 @@ _LOGGER = logging.getLogger("vipscache.state")
 
 
 class WorkerState:
+    """Store disposable metadata, usage counters and graph edges in local LMDB."""
+
     def __init__(
         self,
         state_dir: Path,
@@ -66,6 +68,7 @@ class WorkerState:
             self._log_once("record_identify", error)
 
     def record_materialize(self, spec: ImageSpec, built_node_keys: Sequence[str]) -> None:
+        """Update advisory usage counters and graph edges after rendering."""
         try:
             if spec.encode is None:
                 return
@@ -109,6 +112,7 @@ class WorkerState:
             return []
 
     def inspect(self, key: str) -> dict[str, Any]:
+        """Return a stored graph record and its known children."""
         try:
             with self._env.begin() as txn:
                 node = _loads(txn.get(_key("stats:node", key)))
@@ -145,6 +149,7 @@ class WorkerState:
         )
 
     def _ensure_versions(self) -> None:
+        """Discard advisory state when its format or rendering version changes."""
         stored = None
         try:
             with self._env.begin() as txn:

@@ -3,7 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from vipscache import CacheLayout, MaterializePolicy, Operation, RenderWorker, SourceSpec, WorkerState
+from vipscache import (
+    CacheLayout,
+    MaterializePolicy,
+    Operation,
+    RenderWorker,
+    SourceSpec,
+    WorkerState,
+)
 from vipscache.spec import ENGINE_VERSION, ImageSpec
 from vipscache.state import state_versions
 
@@ -26,6 +33,9 @@ class CountingExecutor:
 
     def render_source(self, source: SourceSpec, path: Path, spec) -> FakeImage:
         return self.apply_node(self.load_source(path), spec)
+
+    def thumbnail_source(self, path: Path, spec, header: FakeImage) -> FakeImage:
+        raise NotImplementedError("thumbnail is not used by state tests")
 
     def load_node(self, path: Path) -> FakeImage:
         raise FileNotFoundError(path)
@@ -59,6 +69,7 @@ def test_worker_state_memoizes_measure_metadata(tmp_path):
     worker = RenderWorker(CacheLayout(tmp_path / "cache"), executor=executor, state=state)
     spec = ImageSpec(SourceSpec("f" * 32), (Operation("scale", {"width": 20}),))
 
+    seed_original(worker, spec)
     assert worker.measure(spec) == {"height": 48, "mode": "RGB", "width": 20}
     assert worker.measure(spec) == {"height": 48, "mode": "RGB", "width": 20}
 
@@ -90,6 +101,7 @@ def test_worker_state_records_materialize_stats_and_edges(tmp_path):
         Operation("encode", {"format": "png"}),
     )
 
+    seed_original(worker, spec)
     path = worker.materialize(spec)
 
     assert path.read_bytes() == b"leaf"
@@ -116,4 +128,10 @@ def test_worker_state_errors_do_not_break_render(tmp_path):
     worker = RenderWorker(CacheLayout(tmp_path / "cache"), executor=executor, state=state)
     spec = ImageSpec(SourceSpec("f" * 32), (Operation("scale", {"width": 20}),))
 
+    seed_original(worker, spec)
     assert worker.measure(spec)["width"] == 20
+
+
+def seed_original(worker, spec):
+    worker.raw_dir.mkdir(parents=True, exist_ok=True)
+    (worker.raw_dir / spec.source.file_id).write_bytes(b"input for CountingExecutor")
