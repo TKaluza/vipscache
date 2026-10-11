@@ -12,12 +12,20 @@ services:
       VIPSCACHE_LIBVIPS_CONCURRENCY: "1"
       VIPSCACHE_MAX_WORKERS: "4"
       VIPSCACHE_ROOT: /data
-      VIPSCACHE_STATE_DIR: /state
+      VIPSCACHE_STATE_DIR: /state/stats
+      VIPSCACHE_MANAGEMENT_DIR: /state/retention
+      VIPSCACHE_MANAGEMENT_SESSION_TIMEOUT_SECONDS: "300"
+      VIPSCACHE_GC_INTERVAL_SECONDS: "60"
+      VIPSCACHE_MAX_INPUT_PIXELS: "100000000"
+      VIPSCACHE_MAX_OUTPUT_PIXELS: "100000000"
+      VIPSCACHE_MAX_DPI: "600"
+      # Optional soft budget for unpinned nodes and leaves, in bytes:
+      # VIPSCACHE_MAX_CACHE_BYTES: "53687091200"
       VIPSCACHE_TTL_SECONDS: "604800"
     volumes:
       - vipscache-data:/data
-      # Worker-local LMDB mmap state. Do not mount this on the shared vipscache
-      # root or on a network filesystem.
+      # LOCAL persistent volume: SQLite pins must survive recreation of the
+      # container. Only /state/stats is disposable. Never put /state on a NAS.
       - vipscache-worker-state:/state
     expose:
       - "5555"

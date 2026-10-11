@@ -50,7 +50,7 @@ that handle. Existing cached files need no worker round trip. Missing encoded
 files are rendered, with one retry for eviction between rendering and opening.
 Original files must already exist. `identify` asks the worker for metadata.
 
-Registration copies into a temporary file in `raw/`, hashes the snapshot in
+Registration copies into `raw/.staging-<uuid>/source`, hashes the snapshot in
 chunks with WASM XXH3-128, and atomically renames it. It does not buffer the
 whole source. Concurrent registrations of identical bytes converge on the
 same ID. Application code should limit simultaneous source ingests separately;
@@ -65,8 +65,44 @@ errors and worker error types. Filesystem errors retain Node's error codes.
 
 ## API names
 
-All data methods return Promises: `register`, `identify`, `resolve`, `open`
-and `readBytes`. `close()` is synchronous. `register(path)` returns a source;
+`register(path, {file_id, verify})` can copy a source using a known XXH3-128 hash.
+`link(path, {file_id, mode: 'hardlink', verify})` avoids copying and, with a known
+hash, avoids reading the source bytes. Symlinks accept `mode: 'symlink'` and an
+absolute worker-visible `link_target`. `unlink(file_id)` removes only the raw
+entry and is idempotent. The caller owns original reference counting.
+
+```ts
+const preview = {
+  source,
+  operations: [{name: 'thumbnail', params: {longest_edge: 320}, materialize: 'force'}],
+  encode: {format: 'webp', params: {quality: 80}},
+} satisfies ImageSpec;
+await images.ensure(preview, {retain: 'pin'}); // explicit pin/force confirmation
+const bytes = await images.readBytes(preview); // direct hit; no retention request
+await images.unpin(preview);     // starts TTL, leaves bytes unchanged
+await images.delete([preview]);  // deletes exactly these leaves, including pins
+```
+
+Import `ImageSpec` as a TypeScript type. Retention belongs only to
+`ensure(spec, {retain: 'pin'})`, which returns the local path after confirmation.
+`ensure(spec)` confirms intermediate requirements without requesting a leaf pin.
+An old worker rejecting `ensure` is never bypassed with `materialize`.
+`open` and `readBytes` always read hits directly, including force/pin specifications;
+misses use ordinary `materialize`. Existing pins are never downgraded by reads or
+ordinary ensures. Durable leaf pins require opt-in worker management. `thumbnail` must be first,
+preserves aspect ratio, and includes the default `autorotate: true` in its key.
+Separate `autorotate` is an operation with empty params. See the shared
+[retention and deployment rules](../../README.md#worker).
+
+`cleanupStaging({olderThan: 86400})` explicitly removes known old import staging
+and returns the number of removed entries. It recognizes the shared UUID-directory
+schema and legacy client names, preserves foreign hidden entries, and uses the
+staging age instead of the original's mtime. It never follows symlink targets.
+Cleanup may overlap imports: `StagingLost` means the caller may retry the import;
+no automatic retry is performed.
+
+All data methods return Promises, including `ensure`, `unpin`, `delete`, `link`,
+`unlink` and `cleanupStaging`. `close()` is synchronous. `register(path)` returns a source;
 `open(spec)` returns a file handle, rendering on a miss. `readBytes(spec)`
 returns a Buffer and closes the handle automatically.
 

@@ -8,6 +8,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class WorkerSettings(BaseSettings):
+    """Worker configuration loaded from VIPSCACHE-prefixed environment variables."""
+
     model_config = SettingsConfigDict(env_prefix="VIPSCACHE_")
 
     endpoint: str = "tcp://*:5555"
@@ -17,6 +19,13 @@ class WorkerSettings(BaseSettings):
     state_dir: Path | None = None
     state_map_size_mb: int = Field(default=1024, ge=1)
     busy_timeout_seconds: float = Field(default=2.0, gt=0)
+    management_dir: Path | None = None
+    management_session_timeout_seconds: float = Field(default=300.0, gt=0, allow_inf_nan=False)
+    gc_interval_seconds: float = Field(default=60.0, ge=0)
+    max_cache_bytes: int | None = Field(default=None, ge=0)
+    max_input_pixels: int | None = Field(default=None, ge=1)
+    max_output_pixels: int | None = Field(default=None, ge=1)
+    max_dpi: int | None = Field(default=None, ge=1)
 
     libvips_concurrency: int = Field(default=1, ge=1)
     libvips_cache_max_mem_mb: int = Field(default=128, ge=0)

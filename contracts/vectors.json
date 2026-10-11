@@ -419,6 +419,226 @@
       },
       "key": "1d082a6ce2ce803fb5051d91c226a0ef",
       "relpath": "cache/leaves/1d/1d082a6ce2ce803fb5051d91c226a0ef.png"
+    },
+    {
+      "name": "thumbnail-default",
+      "input": {
+        "source": {
+          "file_id": "c87846b2eaca44d57cdbda08e1a043b6",
+          "mime": "application/pdf",
+          "metadata": {
+            "filename": "Grüße.pdf"
+          }
+        },
+        "operations": [
+          {
+            "name": "thumbnail",
+            "params": {
+              "longest_edge": 320
+            }
+          }
+        ],
+        "encode": {
+          "format": "png"
+        }
+      },
+      "payload": {
+        "encode": {
+          "engine_version": "vipscache-v1",
+          "format": "png",
+          "params": {}
+        },
+        "operations": [
+          {
+            "materialize": "never",
+            "name": "thumbnail",
+            "params": {
+              "autorotate": true,
+              "longest_edge": 320
+            }
+          }
+        ],
+        "source": {
+          "file_id": "c87846b2eaca44d57cdbda08e1a043b6",
+          "metadata": {
+            "filename": "Grüße.pdf"
+          },
+          "mime": "application/pdf"
+        }
+      },
+      "key": "ef5aead35f2fe35828cd34506594d090",
+      "relpath": "cache/leaves/ef/ef5aead35f2fe35828cd34506594d090.png"
+    },
+    {
+      "name": "thumbnail-no-rotation",
+      "input": {
+        "source": {
+          "file_id": "c87846b2eaca44d57cdbda08e1a043b6",
+          "mime": "application/pdf",
+          "metadata": {
+            "filename": "Grüße.pdf"
+          }
+        },
+        "operations": [
+          {
+            "name": "thumbnail",
+            "params": {
+              "width": 32,
+              "height": 32,
+              "autorotate": false
+            }
+          }
+        ],
+        "encode": {
+          "format": "png"
+        }
+      },
+      "payload": {
+        "encode": {
+          "engine_version": "vipscache-v1",
+          "format": "png",
+          "params": {}
+        },
+        "operations": [
+          {
+            "materialize": "never",
+            "name": "thumbnail",
+            "params": {
+              "autorotate": false,
+              "height": 32,
+              "width": 32
+            }
+          }
+        ],
+        "source": {
+          "file_id": "c87846b2eaca44d57cdbda08e1a043b6",
+          "metadata": {
+            "filename": "Grüße.pdf"
+          },
+          "mime": "application/pdf"
+        }
+      },
+      "key": "dd52559118aee665481cb77de29c41b5",
+      "relpath": "cache/leaves/dd/dd52559118aee665481cb77de29c41b5.png"
+    },
+    {
+      "name": "autorotate",
+      "input": {
+        "source": {
+          "file_id": "c87846b2eaca44d57cdbda08e1a043b6",
+          "mime": "application/pdf",
+          "metadata": {
+            "filename": "Grüße.pdf"
+          }
+        },
+        "operations": [
+          {
+            "name": "autorotate"
+          }
+        ],
+        "encode": {
+          "format": "png"
+        }
+      },
+      "payload": {
+        "encode": {
+          "engine_version": "vipscache-v1",
+          "format": "png",
+          "params": {}
+        },
+        "operations": [
+          {
+            "materialize": "never",
+            "name": "autorotate",
+            "params": {}
+          }
+        ],
+        "source": {
+          "file_id": "c87846b2eaca44d57cdbda08e1a043b6",
+          "metadata": {
+            "filename": "Grüße.pdf"
+          },
+          "mime": "application/pdf"
+        }
+      },
+      "key": "a3224e57fedb9fd99034c9b3eae99779",
+      "relpath": "cache/leaves/a3/a3224e57fedb9fd99034c9b3eae99779.png"
+    }
+  ],
+  "requests": [
+    {
+      "name": "ensure-pin",
+      "input": {
+        "source": {
+          "file_id": "c87846b2eaca44d57cdbda08e1a043b6",
+          "mime": "application/pdf",
+          "metadata": {
+            "filename": "Grüße.pdf"
+          }
+        },
+        "operations": [],
+        "encode": {
+          "format": "png"
+        }
+      },
+      "request": {
+        "method": "ensure",
+        "spec": {
+          "encode": {
+            "engine_version": "vipscache-v1",
+            "format": "png",
+            "params": {}
+          },
+          "operations": [],
+          "source": {
+            "file_id": "c87846b2eaca44d57cdbda08e1a043b6",
+            "metadata": {
+              "filename": "Grüße.pdf"
+            },
+            "mime": "application/pdf"
+          }
+        },
+        "retain": "pin"
+      },
+      "key": "419523a979a803b39d00a97f954c8706",
+      "relpath": "cache/leaves/41/419523a979a803b39d00a97f954c8706.png"
+    },
+    {
+      "name": "ensure-ttl",
+      "input": {
+        "source": {
+          "file_id": "c87846b2eaca44d57cdbda08e1a043b6",
+          "mime": "application/pdf",
+          "metadata": {
+            "filename": "Grüße.pdf"
+          }
+        },
+        "operations": [],
+        "encode": {
+          "format": "png"
+        }
+      },
+      "request": {
+        "method": "ensure",
+        "spec": {
+          "encode": {
+            "engine_version": "vipscache-v1",
+            "format": "png",
+            "params": {}
+          },
+          "operations": [],
+          "source": {
+            "file_id": "c87846b2eaca44d57cdbda08e1a043b6",
+            "metadata": {
+              "filename": "Grüße.pdf"
+            },
+            "mime": "application/pdf"
+          }
+        },
+        "retain": "ttl"
+      },
+      "key": "419523a979a803b39d00a97f954c8706",
+      "relpath": "cache/leaves/41/419523a979a803b39d00a97f954c8706.png"
     }
   ]
 }

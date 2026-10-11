@@ -38,6 +38,7 @@ jobs:
         working-directory: clients/node
         run: npm ci && npm run build
       - run: uv sync --frozen
+      - run: uv run ty check --error-on-warning
       - run: uv run pytest -ra
       - name: Build Python package
         run: uv build

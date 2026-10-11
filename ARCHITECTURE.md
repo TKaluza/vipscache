@@ -5,7 +5,7 @@
 The package is split for two runtime roles:
 
 - Clients ingest originals, build immutable image specs, compute keys and paths, read cache hits directly, and do not depend on libvips or `pyvips`.
-- Render workers own all rendering, transformations, and cache writes. Workers depend on libvips through `pyvips`.
+- Render workers own rendering and staged writes, using `pyvips`. An opt-in local retention owner publishes artifacts and coordinates pins and cleanup through a durable SQLite catalog. Clients still read image hits directly from the filesystem.
 
 The current package extras reflect that split:
 
@@ -67,9 +67,9 @@ There is no `auto` materialization policy. If a caller wants reuse, it should ch
 The canonical operation order is:
 
 ```text
-page / render
-normalize / colorspace / alpha
-fast_rotate / flip / flop
+page / render / thumbnail
+normalize / colorspace
+fast_rotate / flip / flop / autorotate
 crop
 scale / resize
 rotate
@@ -102,6 +102,96 @@ The store is file-based and rooted. `raw/` contains content-addressed originals.
 ```
 
 Paths are derived in POSIX-relative form and translated to native filesystem paths at the root boundary. The filesystem is the primary index: if a file can be opened, it is a cache hit.
+
+## Retention and backward compatibility
+
+`ENGINE_VERSION` remains `vipscache-v1`; existing hashes and paths are unchanged.
+libvips major/minor/micro and codec versions are recorded for diagnosis, not
+injected into old keys. Minor-line upgrades require compatibility review; new
+namespaces are reserved for intentional changes in pixel semantics. Existing
+specs remain addressable. Fresh renders can differ across dependency upgrades.
+
+Leaf retention is an argument of `ensure(spec, retain="pin")`, separate from
+`ImageSpec`, encoding and hashes. Pins stay at ordinary leaf paths. The immutable
+builder's `materialize(policy)` changes the last operation's policy. Only explicit
+`ensure` guarantees every requested force/pin node, including on leaf hits and
+before reusing deeper cached nodes. Existing normal nodes are promoted by hardlink
+under `pinned/`. Ordinary `path`/`open` requests always read hits directly; misses
+use `materialize` and build requested intermediate nodes along the chosen path.
+Only explicit unpin removes retention; reads and ordinary ensures never downgrade it.
+
+Management is enabled only by an explicit `management_dir` or injected service.
+No home/XDG directory or sibling of `state_dir` is created implicitly. Unmanaged
+caches support `ensure()` and legacy node pins; durable leaf pins require the owner.
+An existing managed cache cannot silently revert to unmanaged writes/cleanup.
+
+The owner runs inside one worker service initially. Render processes use the
+`ManagementClient` JSON interface over a private local Unix socket; only the
+owner opens its local SQLite database (WAL, synchronous FULL). A local owner
+lock plus a durable identity marker in the shared cache prevent independent
+catalogs from silently taking over. The protocol boundary can later support a
+separate service and remote renderers; current transport supports local processes
+under one OS user, not independent hosts or isolated container runtime directories.
+
+Sessions acquire sorted shared locks for the node chain and exclusive locks for
+the leaf and nodes needing writes. Existence is rechecked after acquiring the
+locks. If the write set changed, all locks are released and one pessimistic retry
+locks every force/pin node exclusively. Both attempts share a deadline; no lock
+upgrades are allowed. Lazy pixel evaluation retains read protection through
+publication, allowing parallel derivatives to read the same cached parents.
+Cleanup skips busy keys and rechecks current state after locking each candidate.
+Expiry and byte-budget passes use bounded indexed batches; renewing an old
+candidate cannot skip other expired artifacts.
+
+The owner journals publication/deletion before file changes. Pin acknowledgement
+follows committed catalog state; staged data and containing directories are synced
+before publication acknowledgement. Staging paths are registered before rendering;
+GC removes abandoned stages once their session's exclusive lock is gone. Startup
+also removes recognized old stages, under the same locks. Session loss prevents a
+renderer from publishing independently.
+
+Journal recovery precedes requests. A background bidirectional reconciliation
+imports existing artifacts with their mtime and `pinned/` classification, removes
+missing TTL rows, and preserves missing pin intents. Concurrent changes use the
+same locks as the scan. Cleanup is gated on successful reconciliation. A scan
+failure leaves reads/rendering available but disables GC. Missing/mismatched
+catalog identity blocks management; direct client hits remain readable. Stop all
+old workers/evictors before enabling management; old binaries do not know leaf pins.
+The retention directory is persistent local storage, separate from disposable LMDB.
+The container image leaves retention disabled. The Compose example explicitly sets
+its management directory and persists `/state` in a named volume. A byte budget
+without a management directory or injected management client is a startup error.
+Reconciliation compares current metadata before writing; unchanged rows and missing
+pin intents keep their revision. Each batch locks up to 128 artifacts for reading,
+then commits changes in one transaction. No write transaction spans batches.
+
+Management requests have socket timeouts; idle sessions expire (default 300 s).
+`VIPSCACHE_MANAGEMENT_SESSION_TIMEOUT_SECONDS` / `management_session_timeout_seconds`
+configures the owner started by `ZmqWorkerServer`; embedded `ManagementService`
+uses `session_timeout`. Attached workers use the running owner's setting. Rendering
+has no heartbeat, so this value must exceed the longest expected silent render.
+`ManagementService.close()` stops new work and interrupts open session sockets.
+It bounds its wait (default 2 s after stopping the listener). A handler stalled
+inside filesystem I/O retains its catalog and owner lock until it drains; SQLite
+is never closed underneath an in-flight publication. `ManagementClient` defaults
+to a 5 s reply timeout, extended for explicitly longer lock-acquisition requests.
+
+`unpin` transitions leaf retention to ttl and starts a fresh expiry period, even
+if the file is missing; retries preserve that period. Missing pins survive restart
+and subsequent ordinary publication. `delete` removes only named leaves and their
+catalog rows. `unlink` removes only raw entries. Nothing cascades.
+
+Raw import staging uses `raw/.staging-<uuid>/source` in both clients. Explicit
+`cleanup_staging`/`cleanupStaging` recognizes only agreed names, uses staging-directory
+age (ctime as well as mtime for legacy direct links), and never traverses symlink
+targets. Concurrent cleanup may abort an import with `StagingLost`; callers own
+retries. Canonical raw entries and foreign hidden paths are never swept.
+
+New image operations leave existing operation semantics intact. `autorotate`
+applies EXIF rotation/mirroring and removes orientation. Source-first `thumbnail`
+uses shrink-on-load, sRGB thumbnail processing, aspect-preserving bounds and
+libvips pixel rounding; its explicit default `autorotate=true` enters the key.
+Input headers are checked against pixel limits before thumbnail decode.
 
 ## Request Flow
 
@@ -194,7 +284,7 @@ Error response:
 {
   "ok": false,
   "error": {
-    "type": "ValueError",
+    "type": "LimitExceeded",
     "message": "dpi exceeds worker limit"
   }
 }
@@ -317,6 +407,13 @@ VIPSCACHE_TTL_SECONDS=604800
 VIPSCACHE_STATE_DIR=
 VIPSCACHE_STATE_MAP_SIZE_MB=1024
 VIPSCACHE_BUSY_TIMEOUT_SECONDS=2.0
+VIPSCACHE_MANAGEMENT_DIR=
+VIPSCACHE_MANAGEMENT_SESSION_TIMEOUT_SECONDS=300
+VIPSCACHE_GC_INTERVAL_SECONDS=60
+VIPSCACHE_MAX_CACHE_BYTES=
+VIPSCACHE_MAX_INPUT_PIXELS=
+VIPSCACHE_MAX_OUTPUT_PIXELS=
+VIPSCACHE_MAX_DPI=
 VIPSCACHE_LIBVIPS_CONCURRENCY=1
 VIPSCACHE_LIBVIPS_CACHE_MAX_MEM_MB=128
 VIPSCACHE_LIBVIPS_CACHE_MAX_FILES=100
@@ -344,9 +441,17 @@ fresh content hash.
 
 ## Eviction
 
-TTL eviction is file-based and deletes old files under `cache/nodes/` and `cache/leaves/`. It does not delete `cache/pinned/` or `raw/`. The current policy uses file `mtime`.
+Managed TTL starts at publication (legacy import: mtime), or explicit unpin.
+The owner excludes all pins and raw files. With management enabled, a periodic worker task, configurable
+with `VIPSCACHE_GC_INTERVAL_SECONDS` (default 60, zero disables), or `evict_ttl`
+requests cleanup. `VIPSCACHE_MAX_CACHE_BYTES` bounds the unretained node/leaf
+portion by removing oldest publications first. Concurrent rendering can exceed
+this soft target temporarily. Missing owner/catalog means no cleanup fallback.
+The old file-only `vipscache.eviction.evict_ttl` rejects managed caches.
 
-The ZMQ worker exposes an internal `evict_ttl` request, and the underlying function is `vipscache.eviction.evict_ttl(layout, ttl_seconds)`.
+Sliding/inactivity TTL is deferred. Direct client reads will need batched usage
+messages, ordering/clock handling and an explicit approximation policy. Multiple
+hosts sharing NAS are also deferred; SQLite must never be opened over NFS/SMB.
 
 ## Repository Map
 
@@ -355,7 +460,7 @@ pyproject.toml
   Project metadata, Python version, extras, and dev dependencies.
 
 Containerfile.worker
-  uv-based worker image. Installs system libvips and syncs vipscache[worker].
+  uv-based worker image. Builds SHA-256-pinned libvips 8.18.7 with explicit codecs and syncs vipscache[worker].
 
 .containerignore
   Keeps local virtualenvs, tests, caches, and git data out of container builds.
@@ -381,7 +486,13 @@ src/vipscache/originals.py
   Content-addressed raw originals store under <root>/raw.
 
 src/vipscache/eviction.py
-  TTL eviction for nodes and leaves. Pinned nodes are kept.
+  Legacy unmanaged TTL eviction, guarded against use on managed caches.
+
+src/vipscache/catalog.py and locking.py
+  Durable retention, reconciliation, bounded GC and shared/exclusive locks.
+
+src/vipscache/management.py
+  Durable SQLite retention owner, local JSON sessions, publication and cleanup.
 
 src/vipscache/settings.py
   pydantic-settings worker configuration and libvips runtime cache setup.
@@ -488,8 +599,11 @@ load/save     *load, *save                               -> already covered by s
 The worker builds a frozen manifest from this classification (allowed nicknames,
 per-argument GType for canonicalization, defaults). The manifest is data, not code,
 so the client can validate specs against it without importing pyvips, preserving the
-client/worker split. `engine_version` must include the libvips version, since the
-manifest and operation semantics belong to a specific libvips release.
+client/worker split. Such a future manifest would need an explicit compatibility
+version because operations can depend on a particular libvips release. It must
+not automatically include micro/security versions in cache keys. This direction
+does not change existing `vipscache-v1` identities; future namespaces must retain
+access to old specs.
 
 The `Operation(name, params)` spec stays generic and dispatches through a single
 `pyvips.Operation.call(name, image, **params)` path. Operation order is part of
@@ -598,22 +712,24 @@ interaction.
 ### Object Store Direction And The ZMQ Data Plane
 
 The POSIX root may later be complemented by an object store backend (S3 via
-obstore). The seam for this already exists: `io.py` is the only place that
-touches the filesystem for cache content, and the layout derives POSIX-relative
-paths everywhere. An object store backend is a small store interface at that
-seam — `read`, `write_atomic`, `exists`, `delete` — with the POSIX
-implementation being today's behavior and an obstore implementation added
-alongside, not instead.
+obstore). Client reads pass through `io.open_cache_hit()`, which remains an
+extension point for a future storage backend. Managed publication currently
+requires POSIX semantics: the catalog and worker also use `os.replace`, `os.link`
+and `fsync` directly. File existence checks and decoding are not centralized in
+`io.py`. An object store backend would therefore need a storage interface for
+reads, publication, existence and deletion, together with matching retention and
+coordination rules. The existing read helper alone does not abstract those operations.
 
-The mapping is nearly one-to-one:
+Some path and read semantics can carry over:
 
 - Relative cache paths become object keys unchanged.
 - "open = cache hit" becomes "GET = hit"; a 404 is the miss that triggers
   `materialize` over ZMQ, then a second GET.
 - S3 PUT is atomic per object, so the temp-file + `os.replace` dance is simply
   unnecessary there; atomic publication is preserved by the store semantics.
-- TTL eviction maps to native object lifecycle rules; `pinned/` and `raw/`
-  prefixes are excluded from expiry, mirroring today's policy.
+- Native object lifecycle rules would need to respect catalog retention.
+  Excluding `pinned/` and `raw/` prefixes alone is insufficient: pinned leaves
+  share `leaves/` paths with expiring leaves.
 
 Placement is deliberate: `raw/` originals and encoded leaves belong in the
 shared store, because they are what clients and delivery need. `.v` nodes stay

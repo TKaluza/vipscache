@@ -37,12 +37,22 @@ export function canonicalJson(value: Json): string {
 export async function resolveSpec(input: ImageSpec): Promise<Resolution> {
   // Validate and snapshot so concurrent caller mutations cannot alter a sent spec.
   const spec = JSON.parse(canonicalJson(input as unknown as Json)) as ImageSpec;
+  if ('retain' in spec) throw new TypeError('retain belongs to ensure(), not ImageSpec');
   if (!/^[0-9a-f]{32}$/.test(spec.source.file_id)) throw new TypeError('Invalid source file_id');
   spec.source = { file_id: spec.source.file_id, mime: spec.source.mime ?? null, metadata: spec.source.metadata ?? {} };
-  spec.operations = (spec.operations ?? []).map(op => {
+  spec.operations = (spec.operations ?? []).map((op, index) => {
     const policy = op.materialize ?? 'never';
     if (!['never', 'force', 'pin'].includes(policy)) throw new TypeError('Invalid materialize policy');
-    return { name: op.name, params: op.params ?? {}, materialize: policy };
+    const params = op.name === 'thumbnail' ? { autorotate: true, ...op.params } : op.params ?? {};
+    if (op.name === 'thumbnail') {
+      if (index !== 0) throw new TypeError('thumbnail must be the first operation');
+      if (Object.keys(params).some(key => !['autorotate', 'width', 'height', 'longest_edge'].includes(key))) throw new TypeError('Unsupported thumbnail parameter');
+      const sizes = Object.keys(params).filter(key => key !== 'autorotate');
+      if (!sizes.length || (sizes.includes('longest_edge') && sizes.length !== 1)) throw new TypeError('thumbnail requires longest_edge or width/height');
+      if (sizes.some(key => typeof params[key] !== 'number' || !Number.isInteger(params[key]) || (params[key] as number) <= 0 || (params[key] as number) > 2_147_483_647)) throw new TypeError('Invalid thumbnail dimensions');
+      if (typeof params.autorotate !== 'boolean') throw new TypeError('thumbnail autorotate must be boolean');
+    }
+    return { name: op.name, params, materialize: policy };
   });
   let parent = spec.source.file_id;
   const engine = spec.encode?.engine_version ?? 'vipscache-v1';
@@ -56,6 +66,7 @@ export async function resolveSpec(input: ImageSpec): Promise<Resolution> {
   }
   const format = spec.encode.format.toLowerCase() as NonNullable<ImageSpec['encode']>['format'];
   if (!['webp', 'png', 'jpg', 'jpeg', 'avif', 'tif', 'tiff'].includes(format)) throw new TypeError('Unsupported output format');
+  if ('retain' in (spec.encode.params ?? {})) throw new TypeError('retain belongs to ensure(), not the encoder');
   spec.encode = { engine_version: engine, format, params: spec.encode.params ?? {} };
   const key = await xxhash128(canonicalJson({ engine_version: engine, format, operation: 'encode', params: spec.encode.params!, parent_key: parent, type: 'leaf' }));
   return { spec, key, relpath: `cache/leaves/${key.slice(0, 2)}/${key}.${format === 'jpeg' ? 'jpg' : format}` };

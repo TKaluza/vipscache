@@ -1,6 +1,6 @@
 [project]
 name = "vipscache"
-version = "0.4.2"
+version = "0.5.0"
 description = "Content-addressed derivative cache for images and pages."
 readme = "README.md"
 license = "MIT"
@@ -20,6 +20,7 @@ classifiers = [
     "Topic :: Multimedia :: Graphics",
 ]
 dependencies = [
+    "typing-extensions>=4.8",
     "xxhash>=3.5.0",
 ]
 
@@ -47,6 +48,7 @@ dev = [
     "pyvips>=3.0.0",
     "pyzmq>=26.0.0",
     "pytest>=8.0.0",
+    "ty>=0.0.86",
 ]
 
 [project.scripts]

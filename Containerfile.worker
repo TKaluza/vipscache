@@ -1,16 +1,46 @@
-FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
+FROM ghcr.io/astral-sh/uv:0.11.16-python3.13-trixie-slim AS vips-build
+
+ARG VIPS_VERSION=8.18.7
+ARG VIPS_SHA256=5baaead3b0bb20ffdb9e9ff09aa9fda08620923df77b63b436654cb5e0b3bf94
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates curl xz-utils build-essential meson ninja-build pkg-config \
+        libglib2.0-dev libexpat1-dev libexif-dev libjpeg62-turbo-dev libpng-dev \
+        libwebp-dev libtiff-dev libheif-dev libjxl-dev liblcms2-dev libpoppler-glib-dev \
+        libheif-plugin-libde265 libheif-plugin-aomdec libheif-plugin-aomenc libheif-plugin-x265 \
+    && rm -rf /var/lib/apt/lists/*
+RUN curl -fsSL "https://github.com/libvips/libvips/releases/download/v${VIPS_VERSION}/vips-${VIPS_VERSION}.tar.xz" -o /tmp/vips.tar.xz \
+    && echo "${VIPS_SHA256}  /tmp/vips.tar.xz" | sha256sum -c - \
+    && mkdir /tmp/vips && tar -xJf /tmp/vips.tar.xz -C /tmp/vips --strip-components=1 \
+    && meson setup /tmp/vips/build /tmp/vips --prefix=/opt/vips --libdir=lib \
+        --buildtype=release --auto-features=disabled \
+        -Djpeg=enabled -Dpng=enabled -Dwebp=enabled -Dtiff=enabled \
+        -Dheif=enabled -Djpeg-xl=enabled -Dlcms=enabled -Dexif=enabled \
+        -Dpoppler=enabled -Dmodules=disabled -Dintrospection=disabled \
+        -Dexamples=false -Dcplusplus=false \
+    && meson compile -C /tmp/vips/build -j 4 \
+    && meson install -C /tmp/vips/build \
+    && mkdir -p /opt/vips/share/build \
+    && cp /tmp/vips/build/meson-logs/meson-log.txt /opt/vips/share/build/meson-log.txt
+
+FROM ghcr.io/astral-sh/uv:0.11.16-python3.13-trixie-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
 ENV PATH="/app/.venv/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/opt/vips/lib"
+ENV VIPSCACHE_STATE_DIR="/state/stats"
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
-        libvips42 \
+        libglib2.0-0t64 libexpat1 libexif12 libjpeg62-turbo libpng16-16t64 \
+        libwebp7 libwebpmux3 libwebpdemux2 libtiff6 libheif1 libjxl0.11 \
+        liblcms2-2 libpoppler-glib8t64 \
+        libheif-plugin-libde265 libheif-plugin-aomdec libheif-plugin-aomenc libheif-plugin-x265 \
     && rm -rf /var/lib/apt/lists/*
+COPY --from=vips-build /opt/vips /opt/vips
 
 WORKDIR /app
 COPY pyproject.toml uv.lock README.md LICENSE ./
@@ -18,7 +48,9 @@ COPY src ./src
 
 RUN uv sync --frozen --no-dev --extra worker
 
-RUN mkdir -p /data/raw /data/cache
+RUN mkdir -p /data/raw /data/cache /state/stats \
+    && /opt/vips/bin/vips --version \
+    && dpkg-query -W > /opt/vips/share/build/packages.txt
 
 EXPOSE 5555
 
